@@ -42,6 +42,7 @@ struct GameDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 hero
+                if let macBuild { macBlock(macBuild) }
                 verdictBlock
                 playRow
                 if item.installed, !blocked { willDoCard }
@@ -122,6 +123,47 @@ struct GameDetailView: View {
         }
     }
 
+    private var macBuild: GamePageCopy.MacBuild? {
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        let os = v.patchVersion > 0 ? "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)" : "\(v.majorVersion).\(v.minorVersion)"
+        return GamePageCopy.macBuild(state.macSteamBuild(for: item), entry: entry, myChip: state.machineChip, macOS: os)
+    }
+
+    /// A native Mac build on Steam: what it is, why it matters, what it needs. Above the verdict,
+    /// which is about the Windows build.
+    private func macBlock(_ copy: GamePageCopy.MacBuild) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "apple.logo").foregroundStyle(.secondary).padding(.top, 2)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(copy.headline).font(.callout.weight(.semibold))
+                Text(copy.detail).font(.callout).foregroundStyle(.secondary)
+                // This Mac only next to what the build asks for: the verdict below already names the chip.
+                if let requirements = copy.requirements {
+                    Text(requirements).font(.callout).foregroundStyle(.secondary)
+                    Text(copy.yourMac).font(.callout).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 10) {
+                    macButton
+                    Text(copy.source).font(.caption).foregroundStyle(.tertiary)
+                }
+                .padding(.top, 2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(HB.card, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white.opacity(0.35)))
+    }
+
+    /// Only when the Windows build is the installed one: otherwise the play row already offers
+    /// the Mac build (Play on Mac, Install on Mac).
+    @ViewBuilder private var macButton: some View {
+        if item.installed, !item.installedOnMac {
+            Button(state.steamForMacInstalled ? L("Install on Mac") : L("Get Steam for Mac")) { state.installOnMac(item) }
+                .controlSize(.small)
+        }
+    }
+
     private var playRow: some View {
         HStack(spacing: 14) {
             if let running {
@@ -130,6 +172,18 @@ struct GameDetailView: View {
                     Text(ActivityText.minutes(since: running.started, now: ctx.date)
                             .map { String(format: L("Running for %d min"), $0) } ?? L("Running"))
                         .font(.callout).foregroundStyle(HB.good)
+                }
+            } else if item.installedOnMac {
+                // The native build first; a Windows copy in a bottle stays one click away.
+                Button { state.playOnMac(item) } label: {
+                    Label(L("Play on Mac"), systemImage: "play.fill").frame(minWidth: 96)
+                }
+                .buttonStyle(.borderedProminent).controlSize(.large).tint(HB.amber)
+                if item.installed {
+                    Button(L("Play the Windows version")) { state.play(item, windowsBuild: true) }
+                        .controlSize(.large).disabled(state.busy || blocked)
+                } else {
+                    Text(L("Starts through Steam for Mac.")).font(.callout).foregroundStyle(.secondary)
                 }
             } else if item.installed {
                 Button { state.play(item) } label: {
@@ -143,6 +197,23 @@ struct GameDetailView: View {
                 Button(L("Install")) { state.install(item) }.buttonStyle(.borderedProminent).controlSize(.large).tint(HB.amber)
                     .disabled(state.busy)
                 Text(String(format: L("Installs into %@."), state.defaultBottle?.name ?? L("your environment"))).font(.callout).foregroundStyle(.secondary)
+            } else if item.source == .steam, !steamHasManifest, state.macSteamBuild(for: item) != nil {
+                // A native build exists: that's the install on offer; the Windows one is the
+                // way around it, not the default.
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 14) {
+                        Button { state.installOnMac(item) } label: {
+                            Label(state.steamForMacInstalled ? L("Install on Mac") : L("Get Steam for Mac"), systemImage: "apple.logo")
+                        }
+                        .buttonStyle(.borderedProminent).controlSize(.large).tint(HB.amber)
+                        Text(state.steamForMacInstalled ? L("Steam for Mac asks where to put it.")
+                                                        : L("The Mac build installs through Steam for Mac."))
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    Button(L("Install the Windows version instead")) { state.install(item) }
+                        .buttonStyle(.link).font(.callout).disabled(state.busy || blocked)
+                        .help(L("For when the Mac build lags behind or a mod needs the Windows one."))
+                }
             } else if item.source == .steam, !steamHasManifest {
                 // Owned, never installed here (highball#199): Steam's own dialog takes it from here.
                 Button(L("Install")) { state.install(item) }.buttonStyle(.borderedProminent).controlSize(.large).tint(HB.amber)
@@ -159,7 +230,8 @@ struct GameDetailView: View {
 
     private var willDoCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HB.eyebrow(L("When you press Play, Highball will"))
+            // Next to Play on Mac, "Play" alone would read as the Mac build's.
+            HB.eyebrow(item.installedOnMac ? L("When you play the Windows version, Highball will") : L("When you press Play, Highball will"))
             ForEach(Array(willDo.enumerated()), id: \.offset) { _, line in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: line.done ? "checkmark" : (line.cost == nil ? "checkmark" : "hourglass"))

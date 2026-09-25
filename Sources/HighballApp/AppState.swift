@@ -238,10 +238,66 @@ final class AppState {
 
     func rebuildLibrary() {
         libraryItems = LibraryIndex.build(bottles: bottles, steamByBottle: gamesByBottle,
-                                          steamOwnedByBottle: steamOwnedByBottle,
+                                          steamOwnedByBottle: steamOwnedByBottle, macInstalled: macSteamGames,
                                           epicOwned: epicOwned, epicInstalls: epicInstalls,
                                           plays: libraryPlays)
         if let deferred = deferredPlayLink { resolvePlayLink(deferred.request) }
+        refreshMacFlags()
+    }
+
+    // MARK: Mac builds on Steam
+
+    /// What Steam for Mac has installed (MacSteam), refreshed with the bottles' own installs.
+    var macSteamGames: [SteamGame] = []
+
+    /// Steam for Mac is there to take steam:// URLs.
+    var steamForMacInstalled: Bool {
+        NSWorkspace.shared.urlForApplication(toOpen: URL(string: "steam://run/0")!) != nil
+    }
+
+    /// Starts the native build through Steam for Mac.
+    func playOnMac(_ item: LibraryItem) {
+        guard let appid = item.steamAppID else { return }
+        recordPlay(item)
+        NSWorkspace.shared.open(URL(string: "steam://run/\(appid)")!)
+    }
+
+    /// Hands the game to Steam for Mac, whose own dialog asks where to put it; without it, the
+    /// download page for Steam for Mac.
+    func installOnMac(_ item: LibraryItem) {
+        guard let appid = item.steamAppID else { return }
+        NSWorkspace.shared.open(steamForMacInstalled ? URL(string: "steam://install/\(appid)")!
+                                                     : URL(string: "https://store.steampowered.com/about/")!)
+    }
+
+    /// Store `platforms.mac` per appid (MacFlagStore), for Steam games whose appinfo lists macOS.
+    var macFlags: [Int: Bool] = [:]
+    /// Asked this session, answered or not: a store outage must not turn every library rebuild
+    /// into another round of requests.
+    private var macFlagsAsked: Set<Int> = []
+    private var macFlagsTask: Task<Void, Never>?
+
+    func refreshMacFlags() {
+        var listsMac: [Int: Bool] = [:]
+        for game in steamOwnedByBottle.values.joined() { listsMac[game.appid] = game.listsMac }
+        let appids = MacFlagStore.worthAsking(libraryItems.compactMap { $0.source == .steam ? $0.steamAppID : nil },
+                                              listsMac: listsMac)
+        let ask = appids.filter { macFlags[$0] == nil && !macFlagsAsked.contains($0) }
+        guard !ask.isEmpty, macFlagsTask == nil else { return }
+        macFlagsAsked.formUnion(ask)
+        let store = MacFlagStore(paths: paths)
+        macFlagsTask = Task { [weak self] in
+            let flags = await store.refresh(ask)
+            self?.macFlags.merge(flags) { $1 }
+            self?.macFlagsTask = nil
+            self?.refreshMacFlags()   // games that joined the library meanwhile (the owned list loads after installs)
+        }
+    }
+
+    func macSteamBuild(for item: LibraryItem) -> MacSteamBuild? {
+        guard item.source == .steam else { return nil }
+        return MacSteamBuild.resolve(entry: gameDB.entry(for: item), storeMac: item.steamAppID.flatMap { macFlags[$0] },
+                                     installedOnMac: item.installedOnMac)
     }
 
     /// The verified fix recipe for a library item, if the db has one (db entry id == recipe id).
@@ -259,7 +315,10 @@ final class AppState {
     /// with heavy steps asks, with the cost stated.
     /// `renderer` forces one graphics mode for this launch (the D3DMetal ask's "play with the
     /// other mode"); nil lets the row and the environment decide.
-    func play(_ item: LibraryItem, renderer: Renderer? = nil) {
+    /// `windowsBuild` plays the bottle's copy of a game Steam for Mac also has installed; without
+    /// it the native build goes first.
+    func play(_ item: LibraryItem, renderer: Renderer? = nil, windowsBuild: Bool = false) {
+        if item.installedOnMac, renderer == nil, !windowsBuild { playOnMac(item); return }
         guard let bottleName = item.bottleName,
               let found = bottles.first(where: { $0.name == bottleName }) else { return }
         var bottle = found
@@ -635,7 +694,9 @@ final class AppState {
     func refreshInstalledGames() {
         // Re-arm first: a steamapps that did not exist at the last full refresh (Steam was
         // installed after launch) is only watched from here on, and a replaced one is reopened.
-        installWatcher?.watch(bottles.flatMap(installDirectories))
+        installWatcher?.watch(bottles.flatMap(installDirectories) + MacSteam.steamappsDirectories())
+        let mac = MacSteam.installedGames()
+        if mac != macSteamGames { macSteamGames = mac; rebuildLibrary() }
         let games = Dictionary(bottles.map { ($0.name, SteamLibrary.games(in: $0)) }, uniquingKeysWith: { a, _ in a })
         if games != gamesByBottle { gamesByBottle = games; rebuildLibrary() }
         guard epicSignedIn, !epicFetchInFlight else { return }
@@ -680,7 +741,8 @@ final class AppState {
         // Never trap on duplicate names (a Finder-duplicated bottle crashed the app at launch — issue #13).
         gamesByBottle = Dictionary(bottles.map { ($0.name, SteamLibrary.games(in: $0)) }, uniquingKeysWith: { a, _ in a })
         if installWatcher == nil { installWatcher = DirectoryWatcher { [weak self] in self?.refreshInstalledGames() } }
-        installWatcher?.watch(bottles.flatMap(installDirectories))
+        installWatcher?.watch(bottles.flatMap(installDirectories) + MacSteam.steamappsDirectories())
+        macSteamGames = MacSteam.installedGames()
         startSteamClientWatch()
         libraryPlays = libraryStore.load()
         libraryOverrides = libraryStore.rendererOverrides()

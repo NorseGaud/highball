@@ -89,6 +89,7 @@ final class SteamOwnedLibraryTests: XCTestCase {
         let root = try steamRoot(owned: [1145360, 570940, 1145361, 228980, 999], appinfo: appinfo(apps))
         let games = SteamOwnedLibrary.games(steamRoot: root)
         XCTAssertEqual(games.map(\.appid), [570940, 1145360], "games only, by name")
+        XCTAssertEqual(games.map(\.listsMac), [false, true], "appinfo's oslist, for MacFlagStore")
         XCTAssertEqual(games.first?.capsuleImage.absoluteString,
                        "https://cdn.akamai.steamstatic.com/steam/apps/570940/library_600x900.jpg")
     }
@@ -147,5 +148,30 @@ final class SteamOwnedLibraryTests: XCTestCase {
         let hadesItem = items.first { $0.steamAppID == 1145360 }!
         XCTAssertFalse(hadesItem.installed)
         XCTAssertEqual(hadesItem.bottleName, "a", "owned-only games live in the first bottle by name")
+    }
+
+    func testSteamForMacInstallsCountAsInstalled() {
+        let a = bottle("a"), b = bottle("b")
+        let windows = SteamGame(appid: 570940, name: "DARK SOULS™: REMASTERED", installdir: "DSR", sizeOnDisk: 1, stateFlags: 4, lastPlayed: nil)
+        let played = Date(timeIntervalSince1970: 1_790_000_000)
+        func mac(_ appid: Int, _ name: String, _ lastPlayed: Date? = nil) -> SteamGame {
+            SteamGame(appid: appid, name: name, installdir: name, sizeOnDisk: 1, stateFlags: 4, lastPlayed: lastPlayed)
+        }
+        let items = LibraryIndex.build(
+            bottles: [b, a],
+            steamByBottle: ["b": [windows]],
+            steamOwnedByBottle: ["a": [OwnedSteamGame(appid: 1145360, name: "Hades")]],
+            macInstalled: [mac(570940, "DARK SOULS™: REMASTERED"), mac(1145360, "Hades", played), mac(268910, "Cuphead")],
+            epicOwned: [], epicInstalls: [:])
+        XCTAssertEqual(items.map(\.id), ["steam:268910", "steam:570940", "steam:1145360"], "one tile per game, Mac or not")
+        let dsr = items.first { $0.steamAppID == 570940 }!
+        XCTAssertTrue(dsr.installed && dsr.installedOnMac, "both builds")
+        let hades = items.first { $0.steamAppID == 1145360 }!
+        XCTAssertFalse(hades.installed)
+        XCTAssertTrue(hades.installedAnywhere)
+        XCTAssertEqual(hades.lastPlayed, played, "Steam for Mac's LastPlayed feeds Continue")
+        let cuphead = items.first { $0.steamAppID == 268910 }!
+        XCTAssertTrue(cuphead.installedOnMac, "no bottle knows it: a tile of its own")
+        XCTAssertEqual(cuphead.bottleName, "a", "homed where a Windows install would go")
     }
 }

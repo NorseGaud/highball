@@ -7,9 +7,13 @@ public struct OwnedSteamGame: Sendable, Hashable {
     /// The client's own copies of the artwork in librarycache, when it has them.
     public var localCapsule: URL? = nil
     public var localHeader: URL? = nil
+    /// appinfo's `common.oslist` names macOS. Not proof of a Mac build that still runs (Portal's
+    /// 32-bit one is still listed), only which games are worth asking the store about (MacFlagStore).
+    public var listsMac = false
 
-    public init(appid: Int, name: String, localCapsule: URL? = nil, localHeader: URL? = nil) {
+    public init(appid: Int, name: String, localCapsule: URL? = nil, localHeader: URL? = nil, listsMac: Bool = false) {
         self.appid = appid; self.name = name; self.localCapsule = localCapsule; self.localHeader = localHeader
+        self.listsMac = listsMac
     }
 
     /// Local art first: newer apps keep theirs at hashed store paths, so the fixed CDN name
@@ -52,7 +56,8 @@ public enum SteamOwnedLibrary {
             guard let app = apps[appid], app.type?.lowercased() == "game", let name = app.name else { return nil }
             let art = artwork(in: cache.appending(path: String(appid)))
             return OwnedSteamGame(appid: appid, name: name, localCapsule: art["library_600x900.jpg"],
-                                  localHeader: art["library_header.jpg"] ?? art["header.jpg"])
+                                  localHeader: art["library_header.jpg"] ?? art["header.jpg"],
+                                  listsMac: app.oslist?.lowercased().contains("macos") ?? false)
         }
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
