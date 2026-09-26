@@ -372,6 +372,10 @@ public struct BottleSettings: Codable, Sendable {
     /// inherits Steam's environment from before the setting changed and never sees it
     /// (issues #22/#25). Launches re-mirror when this differs from dllOverrides.
     public var dllOverridesSynced: String?
+    /// What WineRunner.syncEngineAppDefaults last wrote into the prefix (engine id plus its
+    /// per-executable defaults), so a launch on the same engine skips the registry and an engine
+    /// change or a manifest update rewrites.
+    public var engineAppDefaultsSynced: String?
     /// Game files stay inside the environment: the user's Documents is a real folder under
     /// drive_c instead of a link to the macOS Documents (which is what wineboot makes, and why
     /// Dark Souls' or the Sims' save folders land in ~/Documents, discussion #157). Off keeps the
@@ -389,7 +393,7 @@ public struct BottleSettings: Codable, Sendable {
     public var recipes: [String] = []
     public var created: Date = Date()
 
-    enum CodingKeys: String, CodingKey { case formatVersion, name, engineID, renderer, rendererExplicit, windowsVersion, sync, metalHUD, advertiseAVX, dxvkAsync, fpsCap, frameGen, frameGenAdaptive, frameGenFlowScale, frameGenPerformance, frameGenForceVsync, commandIsControl, commandIsControlSynced, dpiScale, dllOverrides, dxvkAppConfig, dllOverridesSynced, keepFilesInside, environment, gameEnvironment, pins, recipes, created }
+    enum CodingKeys: String, CodingKey { case formatVersion, name, engineID, renderer, rendererExplicit, windowsVersion, sync, metalHUD, advertiseAVX, dxvkAsync, fpsCap, frameGen, frameGenAdaptive, frameGenFlowScale, frameGenPerformance, frameGenForceVsync, commandIsControl, commandIsControlSynced, dpiScale, dllOverrides, dxvkAppConfig, dllOverridesSynced, engineAppDefaultsSynced, keepFilesInside, environment, gameEnvironment, pins, recipes, created }
 
     /// The variables `gameID`'s recipe scoped to it; empty for a game without any, or with no id.
     public func environment(forGame gameID: String?) -> [String: String] {
@@ -440,6 +444,7 @@ public struct BottleSettings: Codable, Sendable {
         }
         dllOverrides = try c.decodeIfPresent(String.self, forKey: .dllOverrides) ?? ""
         dllOverridesSynced = try c.decodeIfPresent(String.self, forKey: .dllOverridesSynced)
+        engineAppDefaultsSynced = try c.decodeIfPresent(String.self, forKey: .engineAppDefaultsSynced)
         keepFilesInside = try c.decodeIfPresent(Bool.self, forKey: .keepFilesInside) ?? false
         commandIsControl = try c.decodeIfPresent(Bool.self, forKey: .commandIsControl) ?? true
         commandIsControlSynced = try c.decodeIfPresent(Bool.self, forKey: .commandIsControlSynced)

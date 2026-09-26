@@ -245,6 +245,7 @@ public struct WineRunner: Sendable {
     @discardableResult
     public func start(_ executable: URL, arguments: [String] = [], renderer: Renderer? = nil, extraEnvironment: [String: String] = [:], workingDirectory: URL? = nil, headerNote: String? = nil, onOutput: (@Sendable (String) -> Void)? = nil) async throws -> LaunchResult {
         await syncDllOverridesRegistry()
+        await syncEngineAppDefaults()
         await syncKeyboardRegistry()
         var note = headerNote
         if let rebooted = try await rebootIdleEnvironmentIfMismatched(renderer: renderer, extraEnvironment: extraEnvironment) {
@@ -543,6 +544,37 @@ public struct WineRunner: Sendable {
         }
         guard allAdded else { return }
         markSynced { $0.dllOverridesSynced = current }
+    }
+
+    /// The marker `syncEngineAppDefaults` records: the engine and its defaults in a fixed order,
+    /// so the same set on the same engine compares equal whatever the dictionary order.
+    public static func appDefaultsMarker(engineID: String, defaults: [String: [String: String]]) -> String {
+        let body = defaults.keys.sorted().map { exe in
+            exe + "{" + defaults[exe]!.keys.sorted().map { "\($0)=\(defaults[exe]![$0]!)" }.joined(separator: ";") + "}"
+        }.joined(separator: ",")
+        return engineID + ":" + body
+    }
+
+    /// Mirrors the engine's per-executable registry defaults (EngineManifest.appDefaults) into the
+    /// prefix under HKCU\Software\Wine\AppDefaults\<exe>. Once per engine and value set: the marker
+    /// in the settings records what was written, so a launch on the same engine costs nothing and
+    /// an engine change or a manifest update rewrites. Values an earlier engine wrote are left in
+    /// place: they name that engine's own switches (patch 0006's CommandLineAppend), which other
+    /// trees ignore. On failure the marker stays stale so the next launch retries.
+    public func syncEngineAppDefaults() async {
+        let defaults = engine.manifest.appDefaults ?? [:]
+        let wanted = Self.appDefaultsMarker(engineID: engine.id, defaults: defaults)
+        guard wanted != (bottle.settings.engineAppDefaultsSynced ?? "") else { return }
+        var allAdded = true
+        for exe in defaults.keys.sorted() {
+            for name in defaults[exe]!.keys.sorted() {
+                let status = try? await run(["reg", "add", #"HKCU\Software\Wine\AppDefaults\"# + exe, "/v", name, "/t", "REG_SZ", "/d", defaults[exe]![name]!, "/f"],
+                                            renderer: .wined3d, label: "reg").exitStatus
+                if status != 0 { allAdded = false }
+            }
+        }
+        guard allAdded else { return }
+        markSynced { $0.engineAppDefaultsSynced = wanted }
     }
 
     /// Records a "last mirrored into the prefix registry" marker. Re-reads from disk rather than

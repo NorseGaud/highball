@@ -71,6 +71,14 @@ public struct EngineManifest: Codable, Sendable, Identifiable {
     /// keeps DXVK's d3d9 whatever this says: there Direct3D 9 through DXVK is the point (CS:GO
     /// Legacy's CSM check needs it, highball#21).
     public var direct3D9: String?
+    /// Registry values this engine wants under HKCU\Software\Wine\AppDefaults\<exe>, per
+    /// executable: value name to REG_SZ data. Highball mirrors them into every environment on the
+    /// engine before a launch (WineRunner.syncEngineAppDefaults), so an environment that moved to
+    /// the engine gets them without a recipe re-run. First use: on the Wine 11 tree Steam's browser
+    /// (steamwebhelper.exe) composites on the GPU into steam.exe's window and DXVK presents that
+    /// black, while the Wine 10 engine's Steam never touches Direct3D 11, so the engine asks for
+    /// CommandLineAppend = --disable-gpu (patch 0006), the software path (highball#202, 2026-09-26).
+    public var appDefaults: [String: [String: String]]?
     public var components: [String: Component]
     public var baseEnv: [String: String]?
     /// License ids that gate optional renderers (e.g. `apple-gptk-license-2023-08-17` → d3dmetal).
