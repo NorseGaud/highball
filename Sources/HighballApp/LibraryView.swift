@@ -25,7 +25,7 @@ struct LibraryView: View {
     private var filtered: [LibraryItem] {
         state.libraryItems.filter { item in
             if let sourceFilter, item.source != sourceFilter { return false }
-            if installedOnly && !item.installed && (installedTouched || item.source == .steam) { return false }
+            if installedOnly && !item.installedAnywhere && (installedTouched || item.source == .steam) { return false }
             if verifiedOnly {
                 guard state.gameDB.entry(for: item)?.status == "verified-local" else { return false }
             }
@@ -38,7 +38,7 @@ struct LibraryView: View {
     private var continueItems: [LibraryItem] {
         guard state.libraryItems.count > 6 else { return [] }
         return state.libraryItems
-            .filter { $0.lastPlayed != nil && $0.installed }
+            .filter { $0.lastPlayed != nil && $0.installedAnywhere }
             .sorted { ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast) }
             .prefix(10).map { $0 }
     }
@@ -213,15 +213,16 @@ struct LibraryTile: View {
     @State private var coverDropTargeted = false
 
     private var blocked: Bool { entry?.isBlocked == true }
-    private var playable: Bool { item.installed && !blocked && !state.busy }
+    /// Anti-cheat blocks the Windows build only: a native Mac one plays.
+    private var playable: Bool { (item.installedOnMac || (item.installed && !blocked)) && !state.busy }
 
     var body: some View {
         NavigationLink(value: item) {
             VStack(alignment: .leading, spacing: 6) {
                 ZStack {
                     CoverArt(item: item)
-                        .saturation(blocked ? 0.15 : (item.installed ? 1 : 0.45))
-                        .brightness(item.installed ? 0 : -0.08)
+                        .saturation(blocked && !item.installedOnMac ? 0.15 : (item.installedAnywhere ? 1 : 0.45))
+                        .brightness(item.installedAnywhere ? 0 : -0.08)
                     if hovering && playable {
                         ZStack {
                             Color.black.opacity(0.25)
@@ -239,7 +240,7 @@ struct LibraryTile: View {
                         }
                         .transition(.opacity)
                     }
-                    SourceBadge(source: item.source)
+                    SourceBadge(source: item.source, mac: state.macSteamBuild(for: item))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .padding(6)
                     if let appid = item.steamAppID, state.session(forAppID: appid) != nil {
@@ -251,7 +252,7 @@ struct LibraryTile: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                             .padding(6)
                     }
-                    if !item.installed {
+                    if !item.installedAnywhere {
                         Image(systemName: "arrow.down.circle.fill")
                             .foregroundStyle(.white.opacity(0.85))
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
@@ -294,7 +295,7 @@ struct LibraryTile: View {
             } else if playable { Button(L("Play")) { state.play(item) } }
             if MacAppStub.existing(for: item.title) != nil {
                 Button(L("Remove the Mac app")) { state.removeMacApp(title: item.title) }
-            } else if playable, PlayLink.target(for: item) != nil {
+            } else if playable, item.installed, PlayLink.target(for: item) != nil {
                 Button(L("Make a Mac app…")) { state.makeMacApp(for: item) }
             }
             Button(L("Choose cover image…")) { state.chooseCover(for: item) }
@@ -317,7 +318,7 @@ struct LibraryTile: View {
                 Button(L("Uninstall…"), role: .destructive) { state.askUninstall(item) }
             }
         }
-        .accessibilityLabel("\(item.title), \(item.source.rawValue)\(item.installed ? "" : ", " + L("Not installed"))")
+        .accessibilityLabel("\(item.title), \(item.source.rawValue)\(item.installedOnMac ? ", " + L("Installed in Steam for Mac") : item.installed ? "" : ", " + L("Not installed"))")
     }
 
     private var verdict: (String, Color)? { verdictLabel(entry?.status) }
@@ -336,17 +337,25 @@ func verdictLabel(_ status: String?) -> (String, Color)? {
 
 struct SourceBadge: View {
     let source: LibrarySource
+    /// A native Mac build on Steam (MacSteamBuild): an Apple logo in front of the label, and the
+    /// whole badge lit when Steam for Mac has it installed.
+    var mac: MacSteamBuild? = nil
     private var label: String {
         switch source { case .steam: "STEAM"; case .epic: "EPIC"; case .pin: "EXE" }
     }
+    private var lit: Bool { mac == .installed }
     var body: some View {
-        Text(label)
-            .font(.system(size: 8.5, weight: .medium).monospaced())
+        HStack(spacing: 3) {
+            if mac != nil { Image(systemName: "apple.logo").font(.system(size: 8, weight: .semibold)) }
+            Text(label)
+        }
+            .font(.system(size: 8.5, weight: lit ? .bold : .medium).monospaced())
             .kerning(0.4)
             .padding(.horizontal, 5).padding(.vertical, 2)
-            .background(RoundedRectangle(cornerRadius: 4).fill(.black.opacity(0.55)))
-            .overlay(RoundedRectangle(cornerRadius: 4).stroke(.white.opacity(0.18), lineWidth: 0.5))
-            .foregroundStyle(.white.opacity(0.92))
+            .background(RoundedRectangle(cornerRadius: 4).fill(lit ? .white.opacity(0.92) : .black.opacity(0.55)))
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(.white.opacity(lit ? 0 : 0.18), lineWidth: 0.5))
+            .foregroundStyle(lit ? .black : .white.opacity(0.92))
+            .help(lit ? L("Installed in Steam for Mac") : mac != nil ? L("Native Mac build on Steam") : "")
     }
 }
 

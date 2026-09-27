@@ -45,6 +45,36 @@ public enum GamePageCopy {
         }
     }
 
+    /// The card for a game with a native Mac build on Steam. The Windows build stays available,
+    /// as a secondary action: it can still be the one someone wants (a port that lags behind,
+    /// an Intel-only one, mods).
+    public struct MacBuild: Equatable {
+        public var headline: String
+        public var detail: String
+        /// The row's note: the build's own requirements ("macOS 12 and M1 or later").
+        public var requirements: String?
+        public var yourMac: String
+        public var source: String
+    }
+
+    public static func macBuild(_ build: MacSteamBuild?, entry: GameDBEntry?, myChip: String, macOS: String) -> MacBuild? {
+        guard let build else { return nil }
+        let installed = build == .installed
+        let source = switch build {
+        case .installed: "Steam for Mac lists it as installed."
+        case .inDatabase: "From the compatibility database."
+        case .onStore: "Steam's store page lists macOS for it."
+        }
+        return MacBuild(
+            headline: installed ? "Installed in Steam for Mac." : "There is a native Mac build on Steam.",
+            detail: installed
+                ? "Play starts the Mac build through Steam for Mac, with no Windows layer in between."
+                : "It will beat running the Windows version through any compatibility layer, and your Steam purchase already includes it.",
+            requirements: entry?.nativeMac?.available == true ? entry?.nativeMac?.note : nil,
+            yourMac: "Your Mac is an \(shortChip(myChip)) on macOS \(macOS).",
+            source: source)
+    }
+
     /// One line of "when you press Play, Highball will".
     public struct WillDo: Equatable {
         public var text: String

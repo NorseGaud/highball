@@ -22,6 +22,8 @@ public struct LibraryItem: Identifiable, Sendable, Hashable {
     /// Where it lives. nil only for an Epic title owned but not installed in any bottle.
     public let bottleName: String?
     public let installed: Bool
+    /// Steam for Mac has its native build installed (MacSteam); Play goes there first.
+    public let installedOnMac: Bool
     public let steamAppID: Int?
     public let epicAppName: String?
     public let pinID: UUID?
@@ -33,14 +35,18 @@ public struct LibraryItem: Identifiable, Sendable, Hashable {
     public let lastPlayed: Date?
 
     public init(source: LibrarySource, id: String, title: String, bottleName: String?,
-                installed: Bool, steamAppID: Int? = nil, epicAppName: String? = nil,
+                installed: Bool, installedOnMac: Bool = false, steamAppID: Int? = nil, epicAppName: String? = nil,
                 pinID: UUID? = nil, artworkTall: URL? = nil, artworkWide: URL? = nil,
                 otherBottles: [String] = [], sizeOnDisk: Int64 = 0, lastPlayed: Date? = nil) {
         self.source = source; self.id = id; self.title = title; self.bottleName = bottleName
-        self.installed = installed; self.steamAppID = steamAppID; self.epicAppName = epicAppName
+        self.installed = installed; self.installedOnMac = installedOnMac
+        self.steamAppID = steamAppID; self.epicAppName = epicAppName
         self.pinID = pinID; self.artworkTall = artworkTall; self.artworkWide = artworkWide
         self.otherBottles = otherBottles; self.sizeOnDisk = sizeOnDisk; self.lastPlayed = lastPlayed
     }
+
+    /// Playable here in either build: the Windows one in a bottle or the Mac one in Steam for Mac.
+    public var installedAnywhere: Bool { installed || installedOnMac }
 }
 
 public enum LibraryIndex {
@@ -58,13 +64,18 @@ public enum LibraryIndex {
     /// the primary bottle is where it was last played, then a ready copy, then name order.
     /// `steamOwnedByBottle` adds the account's games that aren't installed anywhere
     /// (SteamOwnedLibrary, highball#199), homed in the first bottle whose Steam owns them.
+    /// `macInstalled` is what Steam for Mac has installed (MacSteam): those games count as
+    /// installed, and one no bottle knows gets a tile of its own.
     public static func build(bottles: [Bottle],
                              steamByBottle: [String: [SteamGame]],
                              steamOwnedByBottle: [String: [OwnedSteamGame]] = [:],
+                             macInstalled: [SteamGame] = [],
                              epicOwned: [EpicStore.Game],
                              epicInstalls: [String: String],
                              plays: [String: LibraryStore.PlayRecord] = [:]) -> [LibraryItem] {
         var items: [LibraryItem] = []
+        let onMac = Dictionary(macInstalled.map { ($0.appid, $0) }, uniquingKeysWith: { a, _ in a })
+        let firstBottle = bottles.map(\.name).min { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
         // Steam: group by appid, pick a primary copy, remember the others.
         var byAppID: [Int: [(bottle: String, game: SteamGame)]] = [:]
@@ -81,13 +92,13 @@ public enum LibraryIndex {
                 if a.game.isReady != b.game.isReady { return a.game.isReady }
                 return a.bottle.localizedCaseInsensitiveCompare(b.bottle) == .orderedAscending
             }!
-            let acfPlayed = copies.compactMap(\.game.lastPlayed).max()
+            let acfPlayed = (copies.compactMap(\.game.lastPlayed) + [onMac[appid]?.lastPlayed].compactMap { $0 }).max()
             let recorded = plays[id]?.lastPlayedAt
             // The client's cached art when it has it (see OwnedSteamGame), the CDN otherwise.
             let owned = steamOwnedByBottle.values.lazy.compactMap { $0.first { $0.appid == appid } }.first
             items.append(LibraryItem(
                 source: .steam, id: id, title: primary.game.name, bottleName: primary.bottle,
-                installed: primary.game.isReady, steamAppID: appid,
+                installed: primary.game.isReady, installedOnMac: onMac[appid] != nil, steamAppID: appid,
                 artworkTall: owned?.localCapsule ?? primary.game.capsuleImage,
                 artworkWide: owned?.localHeader ?? primary.game.headerImage,
                 otherBottles: copies.map(\.bottle).filter { $0 != primary.bottle }.sorted(),
@@ -104,10 +115,21 @@ public enum LibraryIndex {
                 let id = "steam:\(game.appid)"
                 items.append(LibraryItem(
                     source: .steam, id: id, title: game.name, bottleName: bottle.name,
-                    installed: false, steamAppID: game.appid,
+                    installed: false, installedOnMac: onMac[game.appid] != nil, steamAppID: game.appid,
                     artworkTall: game.capsuleImage, artworkWide: game.headerImage,
-                    lastPlayed: plays[id]?.lastPlayedAt))
+                    lastPlayed: [onMac[game.appid]?.lastPlayed, plays[id]?.lastPlayedAt].compactMap { $0 }.max()))
             }
+        }
+
+        // Installed in Steam for Mac and nowhere else Highball can see (no bottle's Steam signed
+        // in yet): still the player's game, homed where a Windows install would go.
+        for game in macInstalled where byAppID[game.appid] == nil && !ownedOnly.contains(game.appid) {
+            let id = "steam:\(game.appid)"
+            items.append(LibraryItem(
+                source: .steam, id: id, title: game.name, bottleName: firstBottle,
+                installed: false, installedOnMac: true, steamAppID: game.appid,
+                artworkTall: game.capsuleImage, artworkWide: game.headerImage,
+                lastPlayed: [game.lastPlayed, plays[id]?.lastPlayedAt].compactMap { $0 }.max()))
         }
 
         // Epic: legendary installs one copy; the owning bottle is whichever drive_c

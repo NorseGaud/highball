@@ -125,6 +125,9 @@ public struct GameDBEntry: Codable, Sendable {
         public var detail: String?
     }
     public var rendererResults: [String: RendererResult]?
+    /// A native macOS edition. Highball marks the ones on Steam (the same purchase); `available:
+    /// false` marks a Mac port that no longer runs, which outranks the store's flag (MacSteamBuild).
+    public var nativeMac: NativeMacInfo?
 
     public var isBlocked: Bool { status == "blocked-anticheat" }
 
