@@ -5,6 +5,13 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.9.39</title>
+      <description><![CDATA[Frame generation removed at its author's request, native Mac builds pointed out]]></description>
+      <pubDate>Sun, 27 Sep 2026 21:31:40 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.9.39/Highball-0.9.39.zip" sparkle:version="0.9.39" sparkle:shortVersionString="0.9.39" sparkle:edSignature="g3kI50pXq3CNjTSdXAIrXEYhLwLKiT7qIaTl2abqIfrthXOMrhxG/D3D1Jp/yULFLo4urFBkwpAt2VX6fijEDg==" length="4092846" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.9.38</title>
       <description><![CDATA[Recipe settings scoped to their game, owned Steam games in the library]]></description>
       <pubDate>Sun, 27 Sep 2026 11:29:48 +0200</pubDate>
