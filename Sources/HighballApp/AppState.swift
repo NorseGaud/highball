@@ -250,24 +250,34 @@ final class AppState {
     /// What Steam for Mac has installed (MacSteam), refreshed with the bottles' own installs.
     var macSteamGames: [SteamGame] = []
 
-    /// Steam for Mac is there to take steam:// URLs.
-    var steamForMacInstalled: Bool {
-        NSWorkspace.shared.urlForApplication(toOpen: URL(string: "steam://run/0")!) != nil
+    /// Steam for Mac, when it is one of the apps registered for steam:// (MacSteam.app).
+    var steamForMacApp: URL? {
+        MacSteam.app(among: NSWorkspace.shared.urlsForApplications(toOpen: URL(string: "steam://run/0")!))
+    }
+
+    var steamForMacInstalled: Bool { steamForMacApp != nil }
+
+    /// Opens a steam:// URL with Steam for Mac itself, never the scheme's default handler.
+    private func openInSteamForMac(_ url: URL) -> Bool {
+        guard let app = steamForMacApp else { return false }
+        NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+        return true
     }
 
     /// Starts the native build through Steam for Mac.
     func playOnMac(_ item: LibraryItem) {
         guard let appid = item.steamAppID else { return }
         recordPlay(item)
-        NSWorkspace.shared.open(URL(string: "steam://run/\(appid)")!)
+        _ = openInSteamForMac(URL(string: "steam://run/\(appid)")!)
     }
 
     /// Hands the game to Steam for Mac, whose own dialog asks where to put it; without it, the
     /// download page for Steam for Mac.
     func installOnMac(_ item: LibraryItem) {
         guard let appid = item.steamAppID else { return }
-        NSWorkspace.shared.open(steamForMacInstalled ? URL(string: "steam://install/\(appid)")!
-                                                     : URL(string: "https://store.steampowered.com/about/")!)
+        if !openInSteamForMac(URL(string: "steam://install/\(appid)")!) {
+            NSWorkspace.shared.open(URL(string: "https://store.steampowered.com/about/")!)
+        }
     }
 
     /// Store `platforms.mac` per appid (MacFlagStore), for Steam games whose appinfo lists macOS.

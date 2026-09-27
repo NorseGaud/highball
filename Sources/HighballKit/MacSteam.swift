@@ -5,9 +5,19 @@ import Foundation
 /// `libraryfolders.vdf` (an external drive, say). Read only.
 ///
 /// A game installed there is played through Steam for Mac with `steam://run/<appid>`, and one
-/// that isn't is handed to it with `steam://install/<appid>`: bottles run with winemenubuilder
-/// disabled, so Wine's Steam registers no macOS URL handler and steam:// reaches the Mac app.
+/// that isn't is handed to it with `steam://install/<appid>`, both opened with the Steam for Mac
+/// app itself rather than whatever handles the scheme.
 public enum MacSteam {
+    public static let bundleID = "com.valvesoftware.steam"
+
+    /// Steam for Mac among the apps that open steam:// URLs, or nil when only something else
+    /// does: environments made before winemenubuilder was switched off can still have a
+    /// Wine-made Steam wrapper in ~/Applications/Wine registered for the scheme.
+    public static func app(among handlers: [URL],
+                           bundleID: (URL) -> String? = { Bundle(url: $0)?.bundleIdentifier }) -> URL? {
+        handlers.first { bundleID($0) == Self.bundleID }
+    }
+
     public static var root: URL {
         FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Application Support/Steam")
     }

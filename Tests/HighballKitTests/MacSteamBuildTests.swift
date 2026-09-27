@@ -64,6 +64,17 @@ final class MacSteamBuildTests: XCTestCase {
         XCTAssertEqual(MacSteam.installedGames(root: nowhere), [])
     }
 
+    func testOnlyValvesAppCountsAsSteamForMac() {
+        let wrapper = URL(fileURLWithPath: "/Users/me/Applications/Wine/Steam.app")
+        let steam = URL(fileURLWithPath: "/Applications/Steam.app")
+        let ids = [wrapper: "com.wine.wine.steam", steam: "com.valvesoftware.steam"]
+        XCTAssertEqual(MacSteam.app(among: [wrapper, steam], bundleID: { ids[$0] }), steam,
+                       "a Wine wrapper ahead of it doesn't hide Steam for Mac")
+        XCTAssertNil(MacSteam.app(among: [wrapper], bundleID: { ids[$0] }),
+                     "a Wine wrapper alone isn't Steam for Mac")
+        XCTAssertNil(MacSteam.app(among: []))
+    }
+
     func testRowCanRetireAPortTheStoreStillLists() throws {
         let retired = try entry(#"{"id":"x","title":"X","steam_appid":1,"status":"community","nativeMac":{"available":false,"note":"32-bit, stopped running with Catalina"}}"#)
         XCTAssertNil(MacSteamBuild.resolve(entry: retired, storeMac: true))
