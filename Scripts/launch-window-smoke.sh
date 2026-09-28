@@ -27,6 +27,16 @@ echo "after launch:        $(wins)"
 # Accessibility is denied to this shell, and the smoke then fails as "no main window" with each
 # line blank (2026-09-24). CG still sees the window, so tell the two apart before going on.
 if [ -z "$(wins)" ] && [ "$("$ROOT/Scripts/winlist" 2>/dev/null | grep "pid=$(pid)" | grep -c on=true)" -ge 1 ]; then
+  # With the session locked or the display asleep, System Events reports no windows for any app
+  # while CG still lists them, and every keystroke below would go nowhere (2026-09-28: a gate run
+  # on the locked Mac). Denied Accessibility is a different answer, an outright refusal (-25211).
+  # The main window is on screen, which is the fact the relaunch assertion is about; the
+  # Settings-restoration scenario itself cannot be driven without a session, and the record says so.
+  ax=$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>&1)
+  if ! echo "$ax" | grep -qE "25211|assistive access"; then
+    pkill -f "$BIN" 2>/dev/null; rm -rf "$H"; record true "session locked or display asleep, main window on screen per CG, restoration scenario not driven"
+    echo "LAUNCH WINDOW SMOKE PASSED with a caveat: session locked or display asleep (System Events answers '$ax' but lists no windows), the main window is on screen per CG, the Settings-restoration scenario was not driven"; exit 0
+  fi
   pkill -f "$BIN" 2>/dev/null; rm -rf "$H"; record false "accessibility denied"
   echo "LAUNCH WINDOW SMOKE FAILED: the window is on screen but System Events cannot see it: Accessibility is denied to this shell (System Settings, Privacy & Security, Accessibility)"; exit 1
 fi

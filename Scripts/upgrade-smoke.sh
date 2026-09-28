@@ -106,9 +106,19 @@ if [ "$SCREEN" = 1 ]; then
     # app make its window within a second yet counted none for 30 s, and the log had nothing).
     echo "   CG windows for pid $pid:"; "$ROOT/Scripts/winlist" 2>/dev/null | grep "pid=$pid" | sed 's/^/     /' || true
     echo "   System Events: $(osascript -e "tell application \"System Events\" to name of every process whose unix id is $pid" 2>&1 | head -c 200)"
-    kill "$pid" 2>/dev/null || true
-    [ "$cg" -ge 1 ] && fail "the window is on screen but System Events cannot see it: Accessibility is denied to this shell (System Settings, Privacy & Security, Accessibility)"
-    fail "no window after 30 s"
+    # With the session locked or the display asleep, System Events reports no windows for any
+    # app while CG still lists them (2026-09-28: a gate run on the locked Mac failed here with
+    # Accessibility granted). Denied Accessibility is a different answer: System Events then
+    # refuses outright (-25211). The window being on screen is what this check wants, so when
+    # System Events still answers but lists nothing, CG's word counts.
+    ax=$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>&1)
+    if [ "$cg" -ge 1 ] && ! echo "$ax" | grep -qE "25211|assistive access"; then
+      echo "   session locked or display asleep (System Events answers '$ax' but lists no windows): the window is on screen per CG, which counts"
+    else
+      kill "$pid" 2>/dev/null || true
+      [ "$cg" -ge 1 ] && fail "the window is on screen but System Events cannot see it: Accessibility is denied to this shell (System Settings, Privacy & Security, Accessibility)"
+      fail "no window after 30 s"
+    fi
   fi
   sleep 4
   screencapture -x "$ROOT/private/upgrade-smoke/library.png" 2>/dev/null || true
