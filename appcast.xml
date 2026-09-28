@@ -5,6 +5,14 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.10.0</title>
+      <description><![CDATA[The default engine no longer lets a shared texture crash a game at start, on Highball's own DXMT build]]></description>
+      <pubDate>Mon, 28 Sep 2026 19:41:17 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.0/Highball-0.10.0.zip" sparkle:version="0.10.0" sparkle:shortVersionString="0.10.0" sparkle:edSignature="MSNBK8/SChceUixLFEun3IpnFXBnixOiyHKwCir+9u4MFquozro1P6x34R9IHIZiB48ZAoSRrQOC+PnHXJ1pBQ==" length="4107614" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.9.39</title>
       <description><![CDATA[Frame generation removed at its author's request, native Mac builds pointed out]]></description>
       <pubDate>Sun, 27 Sep 2026 21:31:40 +0200</pubDate>
