@@ -22,4 +22,8 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           NUM: ${{ github.event.issue.number }}
-        run: gh issue edit "$NUM" --repo "$GITHUB_REPOSITORY" --add-label funnel
+        # Install statistics are data, not a conversation: label them so the counts stay
+        # queryable (state:all label:funnel) and close them so they do not sit among the bugs.
+        run: |
+          gh issue edit "$NUM" --repo "$GITHUB_REPOSITORY" --add-label funnel
+          gh issue close "$NUM" --repo "$GITHUB_REPOSITORY" --reason completed
