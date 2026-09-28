@@ -39,10 +39,14 @@ final class BundledEngineTests: XCTestCase {
     }
 
     /// Frame generation left Highball on 2026-09-27 at its author's request (itsOwen's lsfg-metal,
-    /// highball#171): no engine may ship the component any more, and the revisions that replace
-    /// the ones that did, r11 on the main line and r12 on the GPTK 4 line, are their bases (r5,
-    /// r6) under a new id, byte-identical components, so nothing new downloads.
-    func testNoEngineShipsFrameGenerationAndItsReplacementsAreTheirBases() throws {
+    /// highball#171): no engine may ship the component any more. The revisions since are their
+    /// bases (r5 on the main line, r6 on the GPTK 4 line) with one component swapped: DXMT, which
+    /// moved from upstream's v0.80 release to Highball's own build on 2026-09-28, because v0.80's
+    /// D3DKMT adapter lookup fails on this Wine and every shared texture then died at creation
+    /// (ContractVille, highball#202). Everything else is byte-identical, so it is not downloaded
+    /// again, and the DXMT archive comes from Highball's own release page (a component URL has
+    /// to be ours to stay immutable, #27/#28).
+    func testNoEngineShipsFrameGenerationAndTheCurrentRevisionsAreTheirBasesPlusOurDXMT() throws {
         let all = try manifests() + [try EngineManifest.load(from: engines.deletingLastPathComponent().appending(path: "engine-manifest.json"))]
         for m in all {
             XCTAssertNil(m.components["lsfg"], "\(m.id) still ships the lsfg component")
@@ -51,15 +55,19 @@ final class BundledEngineTests: XCTestCase {
             }
         }
         func one(_ id: String) throws -> EngineManifest { try XCTUnwrap(all.first { $0.id == id }, "\(id) missing") }
-        for (replacement, baseID) in [("x64-sikarugir10.0_6-r11", "x64-sikarugir10.0_6-r5"), ("x64-sikarugir10.0_6-r12", "x64-sikarugir10.0_6-r6")] {
-            let r = try one(replacement), base = try one(baseID)
-            XCTAssertEqual(r.minMacOS, base.minMacOS, "\(replacement) must keep \(baseID)'s floor")
-            XCTAssertEqual(r.baseEnv?["D3DM_MTL4"], base.baseEnv?["D3DM_MTL4"], "\(replacement) must keep \(baseID)'s Metal 4 setting")
-            XCTAssertEqual(Set(r.components.keys), Set(base.components.keys), "\(replacement) has exactly \(baseID)'s components")
-            for (name, component) in base.components {
+        for (current, baseID) in [("x64-sikarugir10.0_6-r13", "x64-sikarugir10.0_6-r5"), ("x64-sikarugir10.0_6-r14", "x64-sikarugir10.0_6-r6")] {
+            let r = try one(current), base = try one(baseID)
+            XCTAssertEqual(r.minMacOS, base.minMacOS, "\(current) must keep \(baseID)'s floor")
+            XCTAssertEqual(r.baseEnv?["D3DM_MTL4"], base.baseEnv?["D3DM_MTL4"], "\(current) must keep \(baseID)'s Metal 4 setting")
+            XCTAssertEqual(Set(r.components.keys), Set(base.components.keys), "\(current) has exactly \(baseID)'s components")
+            for (name, component) in base.components where name != "dxmt" {
                 XCTAssertEqual(r.components[name]?.sha256, component.sha256, "\(name) drifted from \(baseID), so its download is not reused")
             }
+            let dxmt = try XCTUnwrap(r.components["dxmt"])
+            XCTAssertTrue(dxmt.url.absoluteString.hasPrefix("https://github.com/gauthierpiarrette/highball-engine/releases/download/dxmt-highball-"),
+                          "\(current)'s DXMT must be Highball's own build from its release page: \(dxmt.url)")
+            XCTAssertNotEqual(dxmt.sha256, base.components["dxmt"]?.sha256, "\(current) must not carry \(baseID)'s v0.80 DXMT")
         }
-        XCTAssertEqual(all.last?.id, "x64-sikarugir10.0_6-r11", "r11 is the default engine")
+        XCTAssertEqual(all.last?.id, "x64-sikarugir10.0_6-r13", "r13 is the default engine")
     }
 }

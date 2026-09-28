@@ -1,13 +1,14 @@
 {
   "$schema": "https://highball.app/schemas/engine-manifest/v0",
-  "id": "x64-sikarugir10.0_6-r11",
-  "displayName": "Wine 10.0 (Sikarugir) + DXMT 0.80 + D3DMetal 3.0 + MoltenVK 1.4.1 (shadow-import patch) + DXVK 3.1 macOS fork Direct3D 9 (opt-in per game)",
+  "id": "x64-sikarugir10.0_6-r13",
+  "displayName": "Wine 10.0 (Sikarugir) + DXMT (Highball build, 2026-09) + D3DMetal 3.0 + MoltenVK 1.4.1 (shadow-import patch) + DXVK 3.1 macOS fork Direct3D 9 (opt-in per game)",
   "arch": "x86_64",
   "minMacOS": "14.0",
   "requires": [
     "rosetta2"
   ],
   "notes": [
+    "r13 (2026-09-28): r11 with Highball's DXMT build (fork branch highball-20260928, 5c50790) in place of upstream v0.80. DXMT opens Wine's D3DKMT adapter by a LUID made from the GPU's IOKit registry ID, which this Wine's Mac driver does not assign (Wine 11's does), so no D3DKMT device existed and an Unreal game that creates a shared render target at start died with CreateTexture2D E_FAIL: ContractVille (highball#202) and the Gold Mining Simulator 2 demo (highball#215), while the same games start on the Wine 11 engines. This build no longer fails a shared texture when no D3DKMT device is there: the texture is created as a private one, which is all the game's own rendering needs, and the log says so once. Measured on an M1 Pro, macOS 27.0, before publishing: ContractVille no longer crashes at start on DXMT here (it then meets this Wine's own stall on its loading screen, a separate fault its entry describes), CloverPit's demo still runs. Every other component is byte-identical to r11, so only the 19 MB DXMT archive is new.",
     "r11 (2026-09-27): r9 without the lsfg component. Its author asked for lsfg-metal to leave Highball over a licensing dispute he did not want to carry, so it is no longer distributed: no engine ships it and the archives come down once this build has reached everyone. Every remaining component is byte-identical to r5, so nothing new downloads. An environment already on r9 keeps the files it has; frame generation is simply not offered on this engine.",
     "Engine is Gcenx's Sikarugir build of upstream Wine 10.0: exports macdrv_functions from winemac.so (required by both DXMT and D3DMetal bridges) and supports WINEDLLPATH_PREPEND for per-bottle renderer overlays.",
     "Vanilla Gcenx wine-devel 11.15 lacks the macdrv_functions export -> DXMT and D3DMetal do NOT work on it. Verified 2026-08-23 with nm.",
@@ -53,24 +54,16 @@
       ]
     },
     "dxmt": {
-      "kind": "renderer",
-      "url": "https://github.com/3Shain/dxmt/releases/download/v0.80/dxmt-v0.80-builtin.tar.gz",
-      "sha256": "8f260e36b5739e68f3bad613381441385c4dc7b85b78ba8de653d5a6a264529d",
-      "size": 18681669,
-      "license": "MIT",
       "extract": {
-        "subpath": "v0.80",
-        "into": "renderers/dxmt/wine"
+        "into": "renderers/dxmt/wine",
+        "subpath": "highball"
       },
-      "layout": [
-        "x86_64-unix/winemetal.so",
-        "x86_64-windows/{d3d11,dxgi,d3d10core,winemetal,nvapi64,nvngx}.dll",
-        "i386-windows/{d3d11,dxgi,d3d10core,winemetal}.dll"
-      ],
-      "env": {
-        "WINEDLLPATH_PREPEND": "${renderers}/dxmt/wine"
-      },
-      "replacesTemplateRenderer": "dxmt v0.74"
+      "kind": "renderer",
+      "license": "MIT (Highball branch of DXMT: SwapDeviceContextState, cross-process opt-in)",
+      "sha256": "1b02c65ce31c49b2ae658b4dc9c5edf374ab3a36888bbd172aa2785b2055a551",
+      "size": 18923879,
+      "url": "https://github.com/gauthierpiarrette/highball-engine/releases/download/dxmt-highball-20260928T092049Z-5c50790/dxmt-highball-20260928T092049Z-5c50790.tar.gz",
+      "note": "DXMT from Highball's fork (gauthierpiarrette/dxmt, branch highball-20260928 at 5c50790): upstream main of 2026-09-16 (v0.80 plus five months of upstream work, among it keyed-mutex and shared-resource support and DXGI functions Steam's overlay can hook) plus four Highball changes: cross-process swapchains behind DXMT_ALLOW_CROSS_PROCESS_SWAPCHAIN (off by default), SwapDeviceContextState implemented instead of aborting, 2D textures answering IDXGISurface, and the one that matters on this Wine: a shared texture with no D3DKMT device behind it is created as a private one, with one error line, instead of failing the game. On this Wine the driver assigns GPU LUIDs of its own, so DXMT's lookup of its adapter fails (the build also tries the primary display's name, which fails here too) and there is never a D3DKMT device; before this build every shared texture then died at creation."
     },
     "d3dmetal-tsshim": {
       "kind": "renderer",
