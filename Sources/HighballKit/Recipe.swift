@@ -597,12 +597,14 @@ public extension Recipe {
     }
 
     /// The engine this recipe names when no manifest this build ships carries it and the
-    /// environment is not already on it: the fix reached the database before the Highball
-    /// that ships its engine (The Last Flame's r11 pin, highball#99, landed while 0.9.32 was
-    /// the stable). Play tells the owner to update instead of launching on the current engine
-    /// as if the recipe had never asked. Nil when the recipe names no engine.
+    /// environment is not already on it or a later revision of its line: the fix reached the
+    /// database before the Highball that ships its engine (The Last Flame's r11 pin,
+    /// highball#99, landed while 0.9.32 was the stable). Play tells the owner to update instead
+    /// of launching on the current engine as if the recipe had never asked. Nil when the
+    /// recipe names no engine.
     func engineUnknown(current: EngineManifest, known: [EngineManifest]) -> String? {
-        guard let id = engine, current.id != id, !known.contains(where: { $0.id == id }) else { return nil }
+        guard let id = engine, !EngineManifest.isAtOrAfter(current: current.id, wanted: id),
+              !known.contains(where: { $0.id == id }) else { return nil }
         return id
     }
 }

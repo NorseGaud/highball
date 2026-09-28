@@ -65,6 +65,65 @@ final class RecipeEngineTests: XCTestCase {
         XCTAssertFalse(EngineManifest.needsPrefixRefresh(from: r5, to: r7), "same Wine, no component asks: the prefix stays")
     }
 
+    /// r12 rebuilt Wine with more patches than r11, and a bottle on r12 was offered r11 for The
+    /// Last Flame's pin, a downgrade. A later revision of the line counts whatever its Wine
+    /// digest, and an earlier bottle is still offered the pin.
+    func testALaterRevisionThatRebuiltWineIsNotOfferedTheEarlierOne() throws {
+        let r11 = try manifest(id: "x64-crossover26.3-r11", wine: "ccc")
+        let r12 = try manifest(id: "x64-crossover26.3-r12", wine: "ddd")
+        let r10 = try manifest(id: "x64-crossover26.3-r10", wine: "bbb")
+        let wine10 = try manifest(id: "x64-sikarugir10.0_6-r13", wine: "aaa")
+        let r = try recipe(engine: "x64-crossover26.3-r11")
+        XCTAssertNil(r.engineToOffer(current: r12, known: [wine10, r10, r11, r12]), "r12 carries r11")
+        XCTAssertEqual(r.engineToOffer(current: r10, known: [wine10, r10, r11, r12])?.id, r11.id)
+        XCTAssertEqual(r.engineToOffer(current: wine10, known: [wine10, r10, r11, r12])?.id, r11.id, "another line")
+        XCTAssertNil(r.engineUnknown(current: r12, known: [wine10, r12]), "a build without r11 on a bottle past it asks for nothing")
+        XCTAssertEqual(r.engineUnknown(current: r10, known: [wine10, r10]), r11.id)
+        XCTAssertEqual(EngineManifest.line(of: "x64-sikarugir10.0_6-r14"), "x64-sikarugir10.0_6")
+        XCTAssertNil(EngineManifest.line(of: "x64-crossover26.3"))
+    }
+
+    /// The Wine 10 tree has two lines under one id: the GPTK 4 revisions (r6, r14) add a
+    /// D3DMetal component the default ones (r5, r13) lack. A default bottle at a higher
+    /// revision must not pass for GPTK 4, while a GPTK 4 bottle carries everything the default has.
+    func testALaterRevisionMustCarryEveryComponentOfThePin() throws {
+        func engine(_ id: String, _ names: [String]) throws -> EngineManifest {
+            let comps = names.map { "\"\($0)\": {\"kind\": \"renderer\", \"url\": \"https://example.invalid/\($0).tar.gz\", \"sha256\": \"\($0)\", \"size\": 1}" }
+            let json = """
+            {"id": "\(id)", "displayName": "Wine 10.0 (test)", "arch": "x86_64", "minMacOS": "14.0",
+             "components": {"wine": {"kind": "engine", "url": "https://example.invalid/aaa.tar.gz", "sha256": "aaa", "size": 1000}\(comps.isEmpty ? "" : ", " + comps.joined(separator: ", "))}}
+            """
+            return try JSONDecoder().decode(EngineManifest.self, from: Data(json.utf8))
+        }
+        let def13 = try engine("x64-sikarugir10.0_6-r13", ["dxmt"])
+        let gptk6 = try engine("x64-sikarugir10.0_6-r6", ["dxmt", "d3dmetal"])
+        let gptk14 = try engine("x64-sikarugir10.0_6-r14", ["dxmt", "d3dmetal"])
+        let def5 = try engine("x64-sikarugir10.0_6-r5", ["dxmt"])
+        XCTAssertEqual(try recipe(engine: gptk6.id).engineToOffer(current: def13, known: [def5, gptk6, def13, gptk14])?.id, gptk6.id)
+        XCTAssertNil(try recipe(engine: gptk6.id).engineToOffer(current: gptk14, known: [def5, gptk6, def13, gptk14]))
+        XCTAssertNil(try recipe(engine: def5.id).engineToOffer(current: gptk14, known: [def5, gptk6, def13, gptk14]))
+        XCTAssertNil(try recipe(engine: def5.id).engineToOffer(current: def13, known: [def5, gptk6, def13, gptk14]))
+    }
+
+    /// Every pin in the database checked against every engine this build ships: a bottle on a
+    /// later revision of the pinned line is never offered an earlier one.
+    func testNoShippedEngineIsOfferedAnEarlierRevisionOfItsOwnLine() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let dir = root.appending(path: "spike/engines")
+        var known = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }.map { try EngineManifest.load(from: $0) }
+        known.append(try EngineManifest.load(from: root.appending(path: "spike/engine-manifest.json")))
+        for current in known {
+            for wanted in known where wanted.id != current.id {
+                guard let offered = try recipe(engine: wanted.id).engineToOffer(current: current, known: known),
+                      EngineManifest.line(of: offered.id) == EngineManifest.line(of: current.id),
+                      Set(offered.components.keys).isSubset(of: current.components.keys) else { continue }
+                XCTAssertGreaterThan(EngineManifest.revision(of: offered.id) ?? 0, EngineManifest.revision(of: current.id) ?? 0,
+                                     "\(current.id) is offered the earlier \(offered.id)")
+            }
+        }
+    }
+
     /// A component that adds a builtin DLL asks for the Windows setup to run again, so the
     /// bottle gets the DLL's placeholder in syswow64 (a game loading it by system path finds
     /// nothing otherwise). The same Wine build is no reason to skip that.

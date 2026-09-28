@@ -129,13 +129,32 @@ public struct EngineManifest: Codable, Sendable, Identifiable {
         return Int(id[range].dropFirst(2))
     }
 
-    /// True when a bottle on `current` already has everything `wanted` would bring: the same
-    /// engine, or a later revision of the same Wine build.
-    public static func satisfies(current: EngineManifest, wanted: EngineManifest) -> Bool {
-        if current.id == wanted.id { return true }
-        guard let a = current.components["wine"]?.sha256, let b = wanted.components["wine"]?.sha256, a == b,
-              let c = revision(of: current.id), let w = revision(of: wanted.id) else { return false }
+    /// The line an engine id belongs to, the id without its revision (`x64-crossover26.3-r7` is
+    /// `x64-crossover26.3`), or nil for an id without one.
+    public static func line(of id: String) -> String? {
+        guard let range = id.range(of: #"-r(\d+)$"#, options: .regularExpression) else { return nil }
+        return String(id[..<range.lowerBound])
+    }
+
+    /// True when `current` is the engine `id` names or a later revision of its line.
+    public static func isAtOrAfter(current: String, wanted id: String) -> Bool {
+        if current == id { return true }
+        guard let l = line(of: current), l == line(of: id),
+              let c = revision(of: current), let w = revision(of: id) else { return false }
         return c >= w
+    }
+
+    /// True when a bottle on `current` already has everything `wanted` would bring: the same
+    /// engine, or a later revision of its line carrying every component it has.
+    ///
+    /// A later revision counts whether or not it rebuilt Wine. Comparing Wine digests made a
+    /// bottle on r12, whose Wine was rebuilt with more patches, be offered r11 for The Last
+    /// Flame's pin, a downgrade. The component check keeps two lines that share an id apart:
+    /// the GPTK 4 revisions of the Wine 10 tree add a D3DMetal component the default ones lack,
+    /// so the default r13 never passes for the GPTK 4 r6.
+    public static func satisfies(current: EngineManifest, wanted: EngineManifest) -> Bool {
+        guard isAtOrAfter(current: current.id, wanted: wanted.id) else { return false }
+        return Set(wanted.components.keys).isSubset(of: current.components.keys)
     }
 
     /// Same rule when the bottle's current engine cannot be resolved (its directory is gone):
