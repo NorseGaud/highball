@@ -194,19 +194,29 @@ public struct WineRunner: Sendable {
             // write(contentsOf:) can't raise; a failed log write is dropped, never fatal.
             DispatchQueue.global(qos: .utility).async {
                 var buffer = Data()
+                // Repeated lines are collapsed and the log is capped (LogFilter, highball#224),
+                // for the file and for the live log alike.
+                var filter = LogFilter()
                 while true {
                     let chunk = reader.availableData
                     if chunk.isEmpty { break }
-                    try? logHandle.write(contentsOf: chunk)
                     buffer.append(chunk)
+                    var out = ""
                     while let nl = buffer.firstIndex(of: 0x0A) {
                         let line = String(decoding: buffer[..<nl], as: UTF8.self)
                         buffer.removeSubrange(...nl)
                         if line.contains("import_dll") { importFailures.append(line) }
-                        onOutput?(line)
+                        for kept in filter.feed(line) {
+                            out += kept + "\n"
+                            onOutput?(kept)
+                        }
                     }
+                    if !out.isEmpty { try? logHandle.write(contentsOf: Data(out.utf8)) }
                 }
-                if !buffer.isEmpty { onOutput?(String(decoding: buffer, as: UTF8.self)) }
+                var rest = filter.finish()
+                if !buffer.isEmpty { rest += filter.feed(String(decoding: buffer, as: UTF8.self)) + filter.finish() }
+                for kept in rest { onOutput?(kept) }
+                if !rest.isEmpty { try? logHandle.write(contentsOf: Data((rest.joined(separator: "\n") + "\n").utf8)) }
                 try? logHandle.close()
             }
           }
