@@ -2,6 +2,8 @@
 <h1 align="center">Highball</h1>
 <p align="center"><b>Run Windows games on Apple Silicon. Free, open, and never locked to one Wine build.</b></p>
 
+<p align="center">English · <a href="README.zh-CN.md">简体中文</a></p>
+
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License: GPL-3.0"></a>
   <a href="https://github.com/gauthierpiarrette/highball/releases/latest"><img src="https://img.shields.io/github/v/release/gauthierpiarrette/highball" alt="Latest release"></a>
