@@ -226,7 +226,7 @@ struct LibraryTile: View {
                     if hovering && playable {
                         ZStack {
                             Color.black.opacity(0.25)
-                            Button { state.play(item) } label: {
+                            Button { hovering = false; state.play(item) } label: {
                                 ZStack {
                                     Circle().fill(HB.amber).frame(width: 44, height: 44)
                                         .shadow(color: .black.opacity(0.45), radius: 9, y: 3)
@@ -287,7 +287,20 @@ struct LibraryTile: View {
         }
         .buttonStyle(.plain)
         .animation(.spring(duration: 0.2), value: hovering)
-        .onHover { hovering = $0 }
+        // Continuous hover, not onHover: onHover only reports crossing the tile's edge, so a
+        // game started from the play button took the screen with the pointer still inside, the
+        // exit never came, and the play button stayed on that tile after coming back, while the
+        // tile actually under the pointer stayed dark until it was left and re-entered
+        // (highball#224). Leaving the app also clears it.
+        .onContinuousHover { phase in
+            switch phase {
+            case .active: if !hovering { hovering = true }
+            case .ended: hovering = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            hovering = false
+        }
         .help(Self.tooltip(entry?.notes) ?? item.title)
         .contextMenu {
             if let appid = item.steamAppID, let running = state.session(forAppID: appid) {
