@@ -304,6 +304,11 @@ final class AppState {
         }
     }
 
+    /// Play on Mac leads for this item (see MacSteamBuild.leads).
+    func prefersMacBuild(_ item: LibraryItem) -> Bool {
+        MacSteamBuild.leads(entry: gameDB.entry(for: item), installedOnMac: item.installedOnMac)
+    }
+
     func macSteamBuild(for item: LibraryItem) -> MacSteamBuild? {
         guard item.source == .steam else { return nil }
         return MacSteamBuild.resolve(entry: gameDB.entry(for: item), storeMac: item.steamAppID.flatMap { macFlags[$0] },
@@ -328,7 +333,7 @@ final class AppState {
     /// `windowsBuild` plays the bottle's copy of a game Steam for Mac also has installed; without
     /// it the native build goes first.
     func play(_ item: LibraryItem, renderer: Renderer? = nil, windowsBuild: Bool = false) {
-        if item.installedOnMac, renderer == nil, !windowsBuild { playOnMac(item); return }
+        if prefersMacBuild(item), renderer == nil, !windowsBuild { playOnMac(item); return }
         guard let bottleName = item.bottleName,
               let found = bottles.first(where: { $0.name == bottleName }) else { return }
         var bottle = found

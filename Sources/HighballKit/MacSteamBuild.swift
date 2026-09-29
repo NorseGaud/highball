@@ -30,6 +30,14 @@ public enum MacSteamBuild: Equatable, Sendable {
         }
         return storeMac == true ? .onStore : nil
     }
+
+    /// Whether Play starts the native build: Steam for Mac has it installed, and the row does not
+    /// say the Mac build is the wrong one to play. The Binding of Isaac's Mac build stops at
+    /// Afterbirth+, so a player who owns the Windows-only Repentance got the old game (highball#223);
+    /// its row says `"available": false` and the Windows build leads, with the Mac one a click away.
+    public static func leads(entry: GameDBEntry?, installedOnMac: Bool) -> Bool {
+        installedOnMac && entry?.nativeMac?.available != false
+    }
 }
 
 /// The row field: `"nativeMac": {"available": true, "where": "Steam", "note": "…", "url": "…"}`.

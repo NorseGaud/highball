@@ -214,7 +214,7 @@ struct LibraryTile: View {
 
     private var blocked: Bool { entry?.isBlocked == true }
     /// Anti-cheat blocks the Windows build only: a native Mac one plays.
-    private var playable: Bool { (item.installedOnMac || (item.installed && !blocked)) && !state.busy }
+    private var playable: Bool { (state.prefersMacBuild(item) || (item.installed && !blocked)) && !state.busy }
 
     var body: some View {
         NavigationLink(value: item) {

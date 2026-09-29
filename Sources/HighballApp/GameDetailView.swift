@@ -173,7 +173,7 @@ struct GameDetailView: View {
                             .map { String(format: L("Running for %d min"), $0) } ?? L("Running"))
                         .font(.callout).foregroundStyle(HB.good)
                 }
-            } else if item.installedOnMac {
+            } else if state.prefersMacBuild(item) {
                 // The native build first; a Windows copy in a bottle stays one click away.
                 Button { state.playOnMac(item) } label: {
                     Label(L("Play on Mac"), systemImage: "play.fill").frame(minWidth: 96)
@@ -191,8 +191,13 @@ struct GameDetailView: View {
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large).tint(HB.amber)
                 .disabled(state.busy || blocked)
-                Text(blocked ? L("Its anti-cheat does not run on macOS.") : L("Highball will ask how it went when you finish."))
-                    .font(.callout).foregroundStyle(.secondary)
+                if item.installedOnMac {
+                    // The row put the Windows build first (a Mac build missing content); the Mac one stays a click away.
+                    Button(L("Play on Mac")) { state.playOnMac(item) }.controlSize(.large)
+                } else {
+                    Text(blocked ? L("Its anti-cheat does not run on macOS.") : L("Highball will ask how it went when you finish."))
+                        .font(.callout).foregroundStyle(.secondary)
+                }
             } else if item.source == .epic {
                 Button(L("Install")) { state.install(item) }.buttonStyle(.borderedProminent).controlSize(.large).tint(HB.amber)
                     .disabled(state.busy)
@@ -231,7 +236,7 @@ struct GameDetailView: View {
     private var willDoCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Next to Play on Mac, "Play" alone would read as the Mac build's.
-            HB.eyebrow(item.installedOnMac ? L("When you play the Windows version, Highball will") : L("When you press Play, Highball will"))
+            HB.eyebrow(state.prefersMacBuild(item) ? L("When you play the Windows version, Highball will") : L("When you press Play, Highball will"))
             ForEach(Array(willDo.enumerated()), id: \.offset) { _, line in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: line.done ? "checkmark" : (line.cost == nil ? "checkmark" : "hourglass"))

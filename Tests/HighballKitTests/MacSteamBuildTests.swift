@@ -29,6 +29,18 @@ final class MacSteamBuildTests: XCTestCase {
                        "it's installed and the player has it: that outranks any row")
     }
 
+    /// The Binding of Isaac's Mac build stops at Afterbirth+; Repentance is Windows only, so a player
+    /// who owns it was sent to the old game (highball#223). A row saying the Mac build is not the one
+    /// to play puts the Windows build first even with the Mac one installed; nothing else changes.
+    func testARowCanPutTheWindowsBuildFirstOverAnInstalledMacOne() throws {
+        let isaac = try entry(#"{"id":"the-binding-of-isaac-rebirth","title":"Isaac","steam_appid":250900,"status":"community","nativeMac":{"available":false,"where":"Steam"}}"#)
+        let hades = try entry(#"{"id":"hades-ii","title":"Hades II","steam_appid":1145350,"status":"community","nativeMac":{"available":true,"where":"Steam"}}"#)
+        XCTAssertFalse(MacSteamBuild.leads(entry: isaac, installedOnMac: true), "the Windows build leads")
+        XCTAssertTrue(MacSteamBuild.leads(entry: hades, installedOnMac: true))
+        XCTAssertTrue(MacSteamBuild.leads(entry: nil, installedOnMac: true), "no row: an installed Mac build leads as before")
+        XCTAssertFalse(MacSteamBuild.leads(entry: hades, installedOnMac: false), "nothing installed on the Mac side")
+    }
+
     // MARK: Steam for Mac's installs
 
     private func macSteam(_ manifests: [String: [(Int, String, Int)]], extraLibrary: URL? = nil) throws -> URL {
