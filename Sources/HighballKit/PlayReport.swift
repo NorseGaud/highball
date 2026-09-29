@@ -45,6 +45,7 @@ public enum PlayReport {
     /// setting; a setting at its default says nothing about the run).
     public static func settingsSummary(_ s: BottleSettings, pin: Pin? = nil) -> String {
         var lines = ["mode \(s.renderer.rawValue), sync \(s.sync.rawValue), Windows \(s.windowsVersion.rawValue), scale \(s.dpiScale) dpi"]
+        if s.retinaAt100 && s.dpiScale <= 96 { lines.append("Retina pixels at 100%") }
         if s.metalHUD { lines.append("Metal HUD on") }
         if s.dxvkAsync { lines.append("DXVK async shader compilation on") }
         if s.advertiseAVX { lines.append("AVX advertised") }

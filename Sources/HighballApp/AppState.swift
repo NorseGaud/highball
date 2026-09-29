@@ -2219,13 +2219,15 @@ final class AppState {
         return target
     }
 
-    func setDpi(_ scale: Int, in bottle: Bottle) {
+    func setDpi(_ scale: Int, retinaAt100: Bool? = nil, in bottle: Bottle) {
         guard let engine = engine(for: bottle) else { return }
         var copy = bottle
         copy.settings.dpiScale = scale
+        if let retinaAt100 { copy.settings.retinaAt100 = retinaAt100 }
         update(copy)
+        let retina = copy.settings.retinaAt100
         runBusy("Applying display scaling", showLogSheet: false) { [self] in
-            try await WineRunner(paths: paths, engine: engine, bottle: copy).setDpi(logPixels: scale)
+            try await WineRunner(paths: paths, engine: engine, bottle: copy).setDpi(logPixels: scale, retinaAt100: retina)
         }
     }
 

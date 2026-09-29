@@ -138,7 +138,7 @@ struct Bottle: AsyncParsableCommand {
     }
 
     struct Set: AsyncParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "Change a bottle setting: engine, renderer, winver, sync, hud, avx, dpi, dxvkasync, framegen, framegenadaptive, framegenflow, framegenperformance, framegenforcevsync, dlloverrides, keepfiles on|off, env KEY=VALUE (empty VALUE removes)")
+        static let configuration = CommandConfiguration(abstract: "Change a bottle setting: engine, renderer, winver, sync, hud, avx, dpi, retina on|off, dxvkasync, framegen, framegenadaptive, framegenflow, framegenperformance, framegenforcevsync, dlloverrides, keepfiles on|off, env KEY=VALUE (empty VALUE removes)")
         @Argument var name: String
         @Argument var setting: String
         @Argument var value: String
@@ -185,7 +185,13 @@ struct Bottle: AsyncParsableCommand {
                 guard let scale = Int(value) else { fail("dpi expects a number (96..240; 96 = 100%, 192 = 200%)") }
                 b.settings.dpiScale = scale
                 let eng = try EngineStore().engine(b.settings.engineID)
-                try await WineRunner(engine: eng, bottle: b).setDpi(logPixels: scale)
+                try await WineRunner(engine: eng, bottle: b).setDpi(logPixels: scale, retinaAt100: b.settings.retinaAt100)
+            case "retina":
+                // Native Retina pixels at 100% scaling too (above 100% they are always on).
+                let on = (value == "1" || value == "true" || value == "on")
+                b.settings.retinaAt100 = on
+                let eng = try EngineStore().engine(b.settings.engineID)
+                try await WineRunner(engine: eng, bottle: b).setDpi(logPixels: b.settings.dpiScale, retinaAt100: on)
             case "env":
                 guard EnvAssignment.apply(value, to: &b.settings.environment) else { fail("env expects KEY=VALUE (empty VALUE removes)") }
             default: fail("unknown setting \(setting)")

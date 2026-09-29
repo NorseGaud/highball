@@ -107,6 +107,23 @@ final class RegressionTests: XCTestCase {
         XCTAssertEqual(WineRunner.dpiRegistry(for: 999).retinaMode, "y")
     }
 
+    // A player whose game scales its own interface with Windows found even 125% too big and
+    // wanted native pixels at 100% (2026-09-29). The switch turns Retina on at 100% and leaves
+    // every other mapping, and every bottle that never set it, exactly as before.
+    func testRetinaAt100KeepsNativePixelsWithoutScaling() throws {
+        XCTAssertEqual(WineRunner.dpiRegistry(for: 96, retinaAt100: true).retinaMode, "y")
+        XCTAssertEqual(WineRunner.dpiRegistry(for: 96, retinaAt100: true).logPixels, 96, "the scaling stays at 100%")
+        XCTAssertEqual(WineRunner.dpiRegistry(for: 144, retinaAt100: false).retinaMode, "y", "above 100% Retina is on either way")
+        let old = try JSONDecoder().decode(BottleSettings.self, from: Data(#"{"name":"a","engineID":"e","dpiScale":96}"#.utf8))
+        XCTAssertFalse(old.retinaAt100, "a bottle that never set it stays at 1x")
+        var on = old
+        on.retinaAt100 = true
+        let back = try JSONDecoder().decode(BottleSettings.self, from: JSONEncoder().encode(on))
+        XCTAssertTrue(back.retinaAt100, "the choice survives a save")
+        XCTAssertTrue(PlayReport.settingsSummary(back).contains("Retina pixels at 100%"))
+        XCTAssertFalse(PlayReport.settingsSummary(old).contains("Retina"))
+    }
+
     // Cmd+V beeped instead of pasting in Steam: Wine's Mac driver leaves Command acting as Alt.
     // Mapping Command to Ctrl without also mapping Option to Alt leaves no way to send Alt at all
     // (winemac.drv warns about exactly that), so the four values must move together.

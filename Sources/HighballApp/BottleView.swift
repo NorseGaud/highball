@@ -435,6 +435,14 @@ struct BottleSettingsSheet: View {
                     }
                     Text(L("Scales the Windows desktop and UI, 100% to 250%. Launchers and desktop apps follow it; many full-screen games set their own resolution and won't. Above 100% uses native Retina pixels, so heavy games may run slower."))
                         .font(.caption).foregroundStyle(.secondary)
+                    // Above 100% Retina pixels are always on, so the choice only exists at 100%.
+                    if Int((dpiDraft ?? Double(currentDpi)).rounded()) <= 96 {
+                        Toggle(L("Retina resolution at 100%"), isOn: Binding(
+                            get: { liveBottle.settings.retinaAt100 },
+                            set: { state.setDpi(currentDpi, retinaAt100: $0, in: liveBottle) }))
+                        Text(L("For a game whose own interface grows with the scaling. Games get the display's full pixel count with nothing scaled up, while Windows apps like Steam draw at half size."))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Section(L("Compatibility")) {
                     Picker(L("Synchronization"), selection: binding(\.sync)) {

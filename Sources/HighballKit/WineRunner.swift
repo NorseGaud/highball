@@ -76,6 +76,7 @@ public struct WineRunner: Sendable {
         out += "# wine \(args.joined(separator: " "))\n"
         out += "# sync=\(Self.effectiveSync(env: env, settings: bottle.settings))"
         out += " winver=\(bottle.settings.windowsVersion.rawValue) dpi=\(bottle.settings.dpiScale)"
+        if bottle.settings.retinaAt100 && bottle.settings.dpiScale <= 96 { out += " retina" }
         out += " dxvkAsync=\(bottle.settings.dxvkAsync)"
         switch bottle.frameGenStatus(engine: engine, environment: env) {
         case .off: out += " frameGen=off\n"
@@ -589,16 +590,17 @@ public struct WineRunner: Sendable {
 
     /// Windows UI scaling. LogPixels is the Windows system DPI (96 = 100%, 240 = 250%): DPI-aware
     /// apps and launchers follow it, though many full-screen games set their own render resolution and
-    /// ignore it. At 96 the Mac driver renders at 1x; above that it switches to native Retina pixels
-    /// (crisper, ~4x GPU work at native res) so the scaled UI stays sharp. Clamped to the 96..240 range
-    /// Wine accepts. Pure so the mapping is unit-tested without touching a prefix.
-    public static func dpiRegistry(for logPixels: Int) -> (retinaMode: String, logPixels: Int) {
+    /// ignore it. At 96 the Mac driver renders at 1x unless `retinaAt100` asks for native pixels;
+    /// above that it always switches to native Retina pixels (crisper, ~4x GPU work at native res) so
+    /// the scaled UI stays sharp. Clamped to the 96..240 range Wine accepts. Pure so the mapping is
+    /// unit-tested without touching a prefix.
+    public static func dpiRegistry(for logPixels: Int, retinaAt100: Bool = false) -> (retinaMode: String, logPixels: Int) {
         let clamped = min(max(logPixels, 96), 240)
-        return (clamped > 96 ? "y" : "n", clamped)
+        return (clamped > 96 || retinaAt100 ? "y" : "n", clamped)
     }
 
-    public func setDpi(logPixels: Int) async throws {
-        let v = Self.dpiRegistry(for: logPixels)
+    public func setDpi(logPixels: Int, retinaAt100: Bool = false) async throws {
+        let v = Self.dpiRegistry(for: logPixels, retinaAt100: retinaAt100)
         try await regAdd(key: #"HKCU\Software\Wine\Mac Driver"#, name: "RetinaMode", type: "REG_SZ", data: v.retinaMode)
         try await regAdd(key: #"HKCU\Control Panel\Desktop"#, name: "LogPixels", type: "REG_DWORD", data: String(v.logPixels))
     }

@@ -361,6 +361,11 @@ public struct BottleSettings: Codable, Sendable {
     /// Mac driver switches to native Retina pixels so the scaled UI stays crisp. Applied to the prefix
     /// registry on change. Supersedes the old on/off retinaMode (which was just 96 / 192).
     public var dpiScale: Int = 96
+    /// Native Retina pixels at 100% as well. Above 100% they are always on; at 100% they are off
+    /// unless this is set, because every Windows app then draws at half size. A game whose own
+    /// interface grows with the Windows scaling wants exactly that: the display's full pixel count
+    /// with nothing scaled up (a player at 2294x1490 found even 125% too big, 2026-09-29).
+    public var retinaAt100: Bool = false
     /// Extra WINEDLLOVERRIDES entries, e.g. "version=n,b" for Cyber Engine Tweaks. Appended to
     /// whatever the renderer sets, semicolon separated.
     public var dllOverrides: String = ""
@@ -393,7 +398,7 @@ public struct BottleSettings: Codable, Sendable {
     public var recipes: [String] = []
     public var created: Date = Date()
 
-    enum CodingKeys: String, CodingKey { case formatVersion, name, engineID, renderer, rendererExplicit, windowsVersion, sync, metalHUD, advertiseAVX, dxvkAsync, fpsCap, frameGen, frameGenAdaptive, frameGenFlowScale, frameGenPerformance, frameGenForceVsync, commandIsControl, commandIsControlSynced, dpiScale, dllOverrides, dxvkAppConfig, dllOverridesSynced, engineAppDefaultsSynced, keepFilesInside, environment, gameEnvironment, pins, recipes, created }
+    enum CodingKeys: String, CodingKey { case formatVersion, name, engineID, renderer, rendererExplicit, windowsVersion, sync, metalHUD, advertiseAVX, dxvkAsync, fpsCap, frameGen, frameGenAdaptive, frameGenFlowScale, frameGenPerformance, frameGenForceVsync, commandIsControl, commandIsControlSynced, dpiScale, retinaAt100, dllOverrides, dxvkAppConfig, dllOverridesSynced, engineAppDefaultsSynced, keepFilesInside, environment, gameEnvironment, pins, recipes, created }
 
     /// The variables `gameID`'s recipe scoped to it; empty for a game without any, or with no id.
     public func environment(forGame gameID: String?) -> [String: String] {
@@ -442,6 +447,7 @@ public struct BottleSettings: Codable, Sendable {
                 .decodeIfPresent(Bool.self, forKey: .retinaMode)) ?? nil
             dpiScale = legacyRetina == true ? 192 : 96
         }
+        retinaAt100 = try c.decodeIfPresent(Bool.self, forKey: .retinaAt100) ?? false
         dllOverrides = try c.decodeIfPresent(String.self, forKey: .dllOverrides) ?? ""
         dllOverridesSynced = try c.decodeIfPresent(String.self, forKey: .dllOverridesSynced)
         engineAppDefaultsSynced = try c.decodeIfPresent(String.self, forKey: .engineAppDefaultsSynced)
