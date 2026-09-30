@@ -334,6 +334,8 @@ public struct BottleSettings: Codable, Sendable {
     /// through d9vk on an M1 Pro gave −0.1%, p = 0.43. Turn it on per game with a recipe
     /// dxvkconfig step if a title ever demonstrates a win.
     public var dxvkAsync: Bool = false
+    /// Route the game's DLSS requests through the active Metal renderer's extension bridge.
+    public var dlssEnabled: Bool = false
     /// Cap the frame rate (0 = uncapped). Applied per renderer (DXVK_FRAME_RATE / DXMT_CONFIG).
     public var fpsCap: Int = 0
     /// frame generation multiplier; 1 disables it
@@ -398,7 +400,7 @@ public struct BottleSettings: Codable, Sendable {
     public var recipes: [String] = []
     public var created: Date = Date()
 
-    enum CodingKeys: String, CodingKey { case formatVersion, name, engineID, renderer, rendererExplicit, windowsVersion, sync, metalHUD, advertiseAVX, dxvkAsync, fpsCap, frameGen, frameGenAdaptive, frameGenFlowScale, frameGenPerformance, frameGenForceVsync, commandIsControl, commandIsControlSynced, dpiScale, retinaAt100, dllOverrides, dxvkAppConfig, dllOverridesSynced, engineAppDefaultsSynced, keepFilesInside, environment, gameEnvironment, pins, recipes, created }
+    enum CodingKeys: String, CodingKey { case formatVersion, name, engineID, renderer, rendererExplicit, windowsVersion, sync, metalHUD, advertiseAVX, dxvkAsync, dlssEnabled, fpsCap, frameGen, frameGenAdaptive, frameGenFlowScale, frameGenPerformance, frameGenForceVsync, commandIsControl, commandIsControlSynced, dpiScale, retinaAt100, dllOverrides, dxvkAppConfig, dllOverridesSynced, engineAppDefaultsSynced, keepFilesInside, environment, gameEnvironment, pins, recipes, created }
 
     /// The variables `gameID`'s recipe scoped to it; empty for a game without any, or with no id.
     public func environment(forGame gameID: String?) -> [String: String] {
@@ -431,6 +433,7 @@ public struct BottleSettings: Codable, Sendable {
         metalHUD = try c.decodeIfPresent(Bool.self, forKey: .metalHUD) ?? false
         advertiseAVX = try c.decodeIfPresent(Bool.self, forKey: .advertiseAVX) ?? false
         dxvkAsync = try c.decodeIfPresent(Bool.self, forKey: .dxvkAsync) ?? false
+        dlssEnabled = try c.decodeIfPresent(Bool.self, forKey: .dlssEnabled) ?? false
         fpsCap = try c.decodeIfPresent(Int.self, forKey: .fpsCap) ?? 0
         let decodedFrameGen = try c.decodeIfPresent(Int.self, forKey: .frameGen) ?? 1
         frameGen = (1...4).contains(decodedFrameGen) ? decodedFrameGen : 1
@@ -728,6 +731,26 @@ public struct Bottle: Sendable {
         merge(&env, settings.environment)
         merge(&env, try effective.environment(engine: engine))
         merge(&env, extra)
+        // CrossOver's DLSS switch enables the renderer's NVIDIA extension bridge. DXMT ships
+        // its DLLs under their normal names; Apple's D3DMetal bridge is named nvngx-on-metalfx
+        // and is exposed as nvngx.dll in this bottle at launch (see prepareDLSSBridge).
+        // Gate the environment by the effective renderer, including per-game overrides.
+        if settings.dlssEnabled, supportsDLSS(engine: engine, renderer: r) {
+            switch r {
+            case .dxmt:
+                env["DXMT_ENABLE_NVEXT"] = "1"
+                merge(&env, ["WINEDLLOVERRIDES+": "nvapi64,nvngx=n,b"])
+            case .d3dmetal:
+                env["D3DM_ENABLE_METALFX"] = "1"
+                if needsDLSSBridgeAliases(engine: engine) {
+                    let aliases = url.appending(path: ".highball-dlss/wine").path
+                    merge(&env, ["WINEDLLPATH_PREPEND+": aliases])
+                }
+                merge(&env, ["WINEDLLOVERRIDES+": "nvapi64,nvngx=n,b"])
+            default:
+                break
+            }
+        }
         // apply frame generation after all overrides
         env.removeValue(forKey: "HB_LSFG_UNAVAILABLE")
         let shimDir = engine.resolveLsfgShimDir()
@@ -771,6 +794,36 @@ public struct Bottle: Sendable {
             if case .unavailable(let reason) = frameGeneration { env["HB_LSFG_UNAVAILABLE"] = reason }
         }
         return env
+    }
+
+    /// The renderer-specific bridge files that make the DLSS switch actionable in this engine.
+    public func supportsDLSS(engine: InstalledEngine, renderer: Renderer? = nil) -> Bool {
+        let selected = renderer ?? settings.renderer
+        guard let dir = engine.rendererDir(selected.rawValue) else { return false }
+        switch selected {
+        case .dxmt:
+            return FileManager.default.fileExists(atPath: dir.appending(path: "wine/x86_64-windows/nvngx.dll").path)
+        case .d3dmetal:
+            let windows = ["nvngx.dll", "nvngx-on-metalfx.dll"].contains {
+                FileManager.default.fileExists(atPath: dir.appending(path: "wine/x86_64-windows/\($0)").path)
+            }
+            let unix = ["nvngx.so", "nvngx-on-metalfx.so"].contains {
+                FileManager.default.fileExists(atPath: dir.appending(path: "wine/x86_64-unix/\($0)").path)
+            }
+            return windows && unix
+        default:
+            return false
+        }
+    }
+
+    private func needsDLSSBridgeAliases(engine: InstalledEngine) -> Bool {
+        guard let dir = engine.rendererDir("d3dmetal") else { return false }
+        let wine = dir.appending(path: "wine")
+        let needsWindowsAlias = !FileManager.default.fileExists(atPath: wine.appending(path: "x86_64-windows/nvngx.dll").path)
+            && FileManager.default.fileExists(atPath: wine.appending(path: "x86_64-windows/nvngx-on-metalfx.dll").path)
+        let needsUnixAlias = !FileManager.default.fileExists(atPath: wine.appending(path: "x86_64-unix/nvngx.so").path)
+            && FileManager.default.fileExists(atPath: wine.appending(path: "x86_64-unix/nvngx-on-metalfx.so").path)
+        return needsWindowsAlias || needsUnixAlias
     }
 
     /// Windows path of the generated DXVK config inside the prefix.
@@ -843,6 +896,38 @@ public struct Bottle: Sendable {
         let content = Self.dxvkConfig(async: settings.dxvkAsync, appConfig: settings.dxvkAppConfig)
         if (try? String(contentsOf: dxvkConfigURL, encoding: .utf8)) != content {
             try content.write(to: dxvkConfigURL, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Apple's GPTK ships the MetalFX NGX bridge under its descriptive filename. Wine looks
+    /// for the standard nvngx module name, so expose aliases inside this bottle (never the shared
+    /// engine or Windows system32). The aliases are only put on the DLL search path when the
+    /// setting is enabled and D3DMetal is the effective renderer.
+    public func prepareDLSSBridge(engine: InstalledEngine, renderer: Renderer) throws {
+        guard settings.dlssEnabled, renderer == .d3dmetal,
+              supportsDLSS(engine: engine, renderer: renderer),
+              let dir = engine.rendererDir("d3dmetal") else { return }
+        let sources = [
+            (dir.appending(path: "wine/x86_64-windows/nvngx.dll"), dir.appending(path: "wine/x86_64-windows/nvngx-on-metalfx.dll"), "x86_64-windows/nvngx.dll"),
+            (dir.appending(path: "wine/x86_64-unix/nvngx.so"), dir.appending(path: "wine/x86_64-unix/nvngx-on-metalfx.so"), "x86_64-unix/nvngx.so"),
+        ]
+        let fm = FileManager.default
+        let wineDir = url.appending(path: ".highball-dlss/wine", directoryHint: .isDirectory)
+        for (direct, renamed, relativeTarget) in sources {
+            if fm.fileExists(atPath: direct.path) { continue }
+            guard fm.fileExists(atPath: renamed.path) else {
+                throw HighballError.missing("D3DMetal's DLSS-to-MetalFX bridge (nvngx-on-metalfx)")
+            }
+            let target = wineDir.appending(path: relativeTarget)
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if let existing = try? fm.destinationOfSymbolicLink(atPath: target.path),
+               URL(fileURLWithPath: existing, relativeTo: target.deletingLastPathComponent()).standardizedFileURL == renamed.standardizedFileURL {
+                continue
+            }
+            if fm.fileExists(atPath: target.path) || (try? fm.destinationOfSymbolicLink(atPath: target.path)) != nil {
+                try fm.removeItem(at: target)
+            }
+            try fm.createSymbolicLink(at: target, withDestinationURL: renamed)
         }
     }
 

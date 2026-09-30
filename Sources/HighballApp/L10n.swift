@@ -127,6 +127,9 @@ enum L10n {
         "Connecting your Epic account": "Connexion de votre compte Epic",
         "Loading your Epic library…": "Chargement de votre bibliothèque Epic…",
         "Advanced": "Avancé",
+        "Enable DLSS (MetalFX)": "Activer DLSS (MetalFX)",
+        "Lets games that support DLSS use the MetalFX translation in DXMT or D3DMetal. Turn DLSS on in the game's own graphics settings too. Stop and relaunch the environment after changing this.":
+            "Permet aux jeux compatibles DLSS d'utiliser la conversion MetalFX de DXMT ou D3DMetal. Activez aussi DLSS dans les réglages graphiques du jeu. Arrêtez puis relancez l'environnement après ce changement.",
         "DLL overrides": "Surcharges de DLL",
         "Extra Wine DLL overrides for this bottle, semicolon separated. Mods like Cyber Engine Tweaks need version=n,b.":
             "Surcharges de DLL Wine supplémentaires pour cette bouteille, séparées par des points-virgules. Des mods comme Cyber Engine Tweaks demandent version=n,b.",
