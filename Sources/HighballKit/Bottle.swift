@@ -905,6 +905,7 @@ public struct Bottle: Sendable {
     /// setting is enabled and D3DMetal is the effective renderer.
     public func prepareDLSSBridge(engine: InstalledEngine, renderer: Renderer) throws {
         guard settings.dlssEnabled, renderer == .d3dmetal,
+              supportsDLSS(engine: engine, renderer: renderer),
               let dir = engine.rendererDir("d3dmetal") else { return }
         let sources = [
             (dir.appending(path: "wine/x86_64-windows/nvngx.dll"), dir.appending(path: "wine/x86_64-windows/nvngx-on-metalfx.dll"), "x86_64-windows/nvngx.dll"),
