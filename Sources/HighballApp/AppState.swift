@@ -356,7 +356,10 @@ final class AppState {
         // D3DMetal on a bottle whose engine had no licence accepted, and every launch in it
         // died with "missing renderer"). A licence is asked for here, once, in context; a mode
         // the engine simply lacks degrades to one it has, and the log says so.
-        var renderer = renderer
+        // The game's own mode is part of what this launch asks for, so every path below carries
+        // it: the Steam restart check, the launch after a fix recipe, Epic (highball-db#195).
+        var renderer = Renderer.launchRequest(requested: renderer, gameOverride: rendererOverride(for: item),
+                                              nativeVulkan: gameDB.entry(for: item)?.nativeVulkan == true)
         if let engine = engine(for: bottle) {
             let entry = gameDB.entry(for: item)
             let pinMode = item.pinID.flatMap { id in bottle.settings.pins.first { $0.id == id }?.renderer }
@@ -431,9 +434,9 @@ final class AppState {
             applyRecipe(recipe.id, to: bottle, then: DoneState(
                 title: String(format: L("%@ installed"), recipe.title),
                 ctaTitle: String(format: L("Play %@"), item.title),
-                cta: { [weak self] in
+                cta: { [weak self, renderer] in
                     guard let self, let fresh = self.bottles.first(where: { $0.name == bottleName }) else { return }
-                    self.launch(item, in: fresh)
+                    self.launch(item, in: fresh, renderer: renderer)
                 }))
             return
         }

@@ -986,4 +986,14 @@ public extension Renderer {
         if nativeVulkan { return requested ?? environment }
         return requested ?? gameOverride ?? (environmentExplicit ? nil : row) ?? pin ?? environment
     }
+
+    /// What a Play asks the launch for, before rows, pins and the environment are weighed: the
+    /// caller's mode, else the game's own override (none for a native-Vulkan title, as in
+    /// `choose`). The override has to travel with the launch as a request. Until 2026-09-30 it
+    /// only fed the licence check, so the launch fell back to the row or the environment and
+    /// restarted Steam to match that: a game set to DXMT ran on DXVK with no word said
+    /// (highball-db#195, Kingdom Hearts), ever since per-game modes existed.
+    static func launchRequest(requested: Renderer?, gameOverride: Renderer?, nativeVulkan: Bool = false) -> Renderer? {
+        requested ?? (nativeVulkan ? nil : gameOverride)
+    }
 }
