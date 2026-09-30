@@ -842,6 +842,7 @@ final class AppState {
                 try? runnerOld.kill()
                 try? await Task.sleep(for: .seconds(2))
                 bottle.settings.engineID = fresh.id
+                if !bottle.supportsDLSS(engine: fresh) { bottle.settings.dlssEnabled = false }
                 try bottle.save()
                 await MainActor.run { self.appendLog("bottle '\(bottle.name)' moved to \(fresh.id) (same Wine, no prefix refresh needed)") }
             }
@@ -888,6 +889,7 @@ final class AppState {
             try? await Task.sleep(for: .seconds(2))
         }
         bottle.settings.engineID = target.id
+        if !bottle.supportsDLSS(engine: target) { bottle.settings.dlssEnabled = false }
         try bottle.save()
         guard EngineManifest.needsPrefixRefresh(from: source?.manifest, to: target.manifest) else {
             await MainActor.run { self.appendLog("bottle '\(bottle.name)' moved to \(target.id) (same Wine, no prefix refresh needed)") }

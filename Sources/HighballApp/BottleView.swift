@@ -309,6 +309,9 @@ struct BottleSettingsSheet: View {
                             var copy = state.bottles.first { $0.name == bottle.name } ?? bottle
                             copy.settings.renderer = newValue
                             copy.settings.rendererExplicit = true
+                            if let engine, !copy.supportsDLSS(engine: engine, renderer: newValue) {
+                                copy.settings.dlssEnabled = false
+                            }
                             Task { @MainActor in state.update(copy) }
                         })) {
                         Text(L("DXMT — D3D10/11 → Metal (default)")).tag(Renderer.dxmt)
@@ -320,8 +323,14 @@ struct BottleSettingsSheet: View {
                         if vkd3dAvailable || currentRenderer == .vkd3d { Text(L("vkd3d-proton — D3D12 → Vulkan (experimental)")).tag(Renderer.vkd3d) }
                         Text(L("WineD3D — slow fallback")).tag(Renderer.wined3d)
                     }
-                    Toggle(L("Enable DLSS (MetalFX)"), isOn: binding(\.dlssEnabled))
-                        .disabled(!dlssAvailable && !liveBottle.settings.dlssEnabled)
+                    Toggle(L("Enable DLSS (MetalFX)"), isOn: Binding(
+                        get: { dlssAvailable && liveBottle.settings.dlssEnabled },
+                        set: { enabled in
+                            var copy = liveBottle
+                            copy.settings.dlssEnabled = dlssAvailable && enabled
+                            Task { @MainActor in state.update(copy) }
+                        }))
+                        .disabled(!dlssAvailable)
                     Text(L("Lets games that support DLSS use the MetalFX translation in DXMT or D3DMetal. Turn DLSS on in the game's own graphics settings too. Stop and relaunch the environment after changing this."))
                         .font(.caption).foregroundStyle(.secondary)
                     if !d3dmetalAvailable, currentRenderer == .d3dmetal, let engine, let why = Renderer.d3dmetal.unavailableReason(in: engine) {
