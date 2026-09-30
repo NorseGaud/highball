@@ -261,6 +261,7 @@ struct LibraryTile: View {
                 }
                 .aspectRatio(2 / 3, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 9))
+                .contentShape(RoundedRectangle(cornerRadius: 9))   // hits stop where the cover is drawn, see CoverArt
                 // An image dropped on the tile becomes the cover, so nobody has to walk a file
                 // browser for it (highball#175). Only images are claimed here, so a dropped
                 // Windows program still reaches the window's own handler and runs.
@@ -415,6 +416,11 @@ struct CoverArt: View {
                 }
             }
             .clipped()
+            // clipped() trims the drawing, not hit testing: a wide cover scaled to fill (Steam's
+            // fallback art, Half-Life 2's demo, Heartopia) still caught the pointer over the
+            // neighbouring tiles, so the tile to the left showed the next one's play button and
+            // its clicks went nowhere (seen on an M4, 2026-10-01). Hits stop at the visible cover.
+            .contentShape(Rectangle())
     }
 
     private var placeholder: some View {
