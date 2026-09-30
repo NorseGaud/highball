@@ -5,6 +5,14 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.10.1</title>
+      <description><![CDATA[Games keep their mouse and keyboard after you switch away and come back]]></description>
+      <pubDate>Wed, 30 Sep 2026 19:06:06 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.1/Highball-0.10.1.zip" sparkle:version="0.10.1" sparkle:shortVersionString="0.10.1" sparkle:edSignature="NJKBrNUMAHNI5cxTc5LmKpcgquCGaUjfOOSyq8wMVsgw8wDZPOc8xWXad7R1TeTIRP863CUtWI8LZc3Vz0afCA==" length="4172868" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.10.0</title>
       <description><![CDATA[The default engine no longer lets a shared texture crash a game at start, on Highball's own DXMT build]]></description>
       <pubDate>Mon, 28 Sep 2026 19:41:17 +0200</pubDate>
