@@ -120,6 +120,7 @@ public struct WineRunner: Sendable {
         // A bottle set to a renderer its engine cannot run degrades to one it can (#61); the
         // note goes in the header and to the caller so the substitution is never silent.
         let resolved = try bottle.effectiveRenderer(requested: renderer, engine: engine)
+        try bottle.prepareDLSSBridge(engine: engine, renderer: resolved.renderer)
         if resolved.renderer != .wined3d { try? bottle.writeDxvkConfig() }
         var env = try bottle.environment(engine: engine, renderer: renderer, extra: extraEnvironment)
         // Wine fixes the sync mode when the prefix's wineserver starts; a process started with a
