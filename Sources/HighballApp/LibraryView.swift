@@ -343,7 +343,7 @@ func verdictLabel(_ status: String?) -> (String, Color)? {
     case "verified-local": return (L("Verified"), HB.good)
     case "reported-upstream": return (L("Reported"), Color(red: 0.55, green: 0.70, blue: 0.90))
     case "community": return (L("Community"), HB.warn)
-    case "blocked-anticheat": return (L("Blocked"), HB.bad)
+    case let s? where s.hasPrefix("blocked-"): return (L("Blocked"), HB.bad)
     default: return nil
     }
 }

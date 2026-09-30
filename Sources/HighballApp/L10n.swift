@@ -415,6 +415,7 @@ enum L10n {
         "It played fine": "Ça a bien marché",
         "It was running with %@ and quit after %d seconds without an error the app could read.": "Il tournait avec %@ et s'est fermé après %d secondes sans erreur lisible par l'app.",
         "Its anti-cheat does not run on macOS.": "Son anti-triche ne fonctionne pas sur macOS.",
+        "Its publisher stops it on macOS on purpose.": "Son éditeur l'arrête volontairement sur macOS.",
         "Launch arguments": "Arguments de lancement",
         "New environment…": "Nouvel environnement…",
         "No row in the compatibility database yet.": "Pas encore d'entrée dans la base de compatibilité.",

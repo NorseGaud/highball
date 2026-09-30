@@ -105,7 +105,7 @@ struct GameDetailView: View {
     private var verdictColor: Color {
         switch entry?.status {
         case "verified-local": return HB.good
-        case "blocked-anticheat": return HB.bad
+        case let s? where s.hasPrefix("blocked-"): return HB.bad
         case nil: return .secondary
         default: return HB.amber
         }
@@ -195,7 +195,9 @@ struct GameDetailView: View {
                     // The row put the Windows build first (a Mac build missing content); the Mac one stays a click away.
                     Button(L("Play on Mac")) { state.playOnMac(item) }.controlSize(.large)
                 } else {
-                    Text(blocked ? L("Its anti-cheat does not run on macOS.") : L("Highball will ask how it went when you finish."))
+                    Text(!blocked ? L("Highball will ask how it went when you finish.")
+                         : entry?.status == "blocked-publisher" ? L("Its publisher stops it on macOS on purpose.")
+                         : L("Its anti-cheat does not run on macOS."))
                         .font(.callout).foregroundStyle(.secondary)
                 }
             } else if item.source == .epic {

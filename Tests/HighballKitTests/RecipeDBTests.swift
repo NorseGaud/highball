@@ -49,7 +49,7 @@ final class RecipeDBTests: XCTestCase {
             do {
                 let e = try JSONDecoder.highball.decode(GameDBEntry.self, from: Data(contentsOf: f))
                 XCTAssertFalse(e.id.isEmpty, f.lastPathComponent)
-                XCTAssertTrue(["verified-local", "reported-upstream", "community", "blocked-anticheat"].contains(e.status),
+                XCTAssertTrue(["verified-local", "reported-upstream", "community", "blocked-anticheat", "blocked-publisher"].contains(e.status),
                               "\(f.lastPathComponent): unknown status '\(e.status)'")
             } catch {
                 XCTFail("\(f.lastPathComponent) failed to decode: \(error)")
