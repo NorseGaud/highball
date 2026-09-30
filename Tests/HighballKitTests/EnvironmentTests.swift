@@ -265,6 +265,7 @@ final class EnvironmentTests: XCTestCase {
         bottle.settings.fpsCap = 45
         let env = try bottle.environment(engine: engine, renderer: .d3dmetal)
         XCTAssertEqual(env["DXMT_CONFIG"], "d3d11.preferredMaxFrameRate=45;")
+        XCTAssertEqual(env["D3DM_MAX_FPS"], "45", "the 64-bit games D3DMetal serves get its own cap")
         XCTAssertNil(env["DXVK_FRAME_RATE"], "d3dmetal has no dxvk cap channel")
     }
 }

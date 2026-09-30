@@ -714,7 +714,12 @@ public struct Bottle: Sendable {
             switch r {
             case .dxvk: env["DXVK_FRAME_RATE"] = String(settings.fpsCap)
             case .vkd3d: env["DXVK_FRAME_RATE"] = String(settings.fpsCap); env["VKD3D_FRAME_RATE"] = String(settings.fpsCap)
-            case .dxmt, .d3dmetal: env["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=\(settings.fpsCap);" // 32-bit titles on d3dmetal run on dxmt
+            case .dxmt: env["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=\(settings.fpsCap);"
+            case .d3dmetal:
+                env["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=\(settings.fpsCap);" // 32-bit titles on d3dmetal run on dxmt
+                // D3DMetal reads its own cap (D3DMetal 4, the GPTK 4 engines; earlier builds ignore
+                // it). Without it the cap never reached a 64-bit game in this mode.
+                env["D3DM_MAX_FPS"] = String(settings.fpsCap)
             default: break
             }
         }
