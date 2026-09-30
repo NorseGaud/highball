@@ -29,6 +29,13 @@ if Scripts/winlist 2>/dev/null | grep -qE "loginwindow[[:space:]]+\|\|[[:space:]
   python3 -c "import json,time;json.dump({'passed':False,'locked':True,'epoch':int(time.time()),'date':time.strftime('%Y-%m-%d'),'commit':'$COMMIT','required':['unit','upgrade','firstrun','launch-window'],'checks':{}},open('$OUT/latest.json','w'),indent=2)"
   exit 3
 fi
+# A Highball already open (the installed one, say) makes every copy the smokes launch start with
+# no window, since they share its bundle id, and upgrade-smoke then "fails" (2026-09-30: 0.9.39
+# was open, and 0.9.39 itself launched as a second copy showed no window either). Stop and say so.
+if pgrep -fl "Highball.app/Contents/MacOS/Highball" | grep -v "/dist/Highball.app/" | grep -q .; then
+  echo "gate: another Highball is open ($(pgrep -fl 'Highball.app/Contents/MacOS/Highball' | grep -v '/dist/Highball.app/' | head -1)); quit it and run again (nothing was tested)" >&2
+  exit 3
+fi
 echo "gate: building dist/Highball.app from the working tree"
 Scripts/make-app.sh >"$OUT/make-app.log" 2>&1 || { echo "gate: make-app failed, see $OUT/make-app.log" >&2; exit 2; }
 
