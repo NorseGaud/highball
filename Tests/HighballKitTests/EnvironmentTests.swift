@@ -241,6 +241,23 @@ final class EnvironmentTests: XCTestCase {
         return engine
     }
 
+    /// highball#127: an engine that ships the audio buffer library gets it inserted into Wine's
+    /// processes, a library the player set keeps its place after it, and HB_AUDIOBUF=0 leaves it out.
+    func testTheAudioBufferLibraryIsInsertedOnlyWhenTheEngineShipsIt() throws {
+        let engine = try d3dmetalEngine()
+        defer { try? FileManager.default.removeItem(at: engine.root) }
+        var bottle = Bottle(url: URL(fileURLWithPath: "/tmp/hb-test-bottle"), settings: BottleSettings(name: "t", engineID: engine.id))
+        XCTAssertNil(try bottle.environment(engine: engine)["DYLD_INSERT_LIBRARIES"], "an engine without the library inserts nothing")
+        let lib = engine.frameworksDir.appending(path: "libhbaudiobuf.dylib")
+        try Data().write(to: lib)
+        XCTAssertEqual(try bottle.environment(engine: engine)["DYLD_INSERT_LIBRARIES"], lib.path)
+        bottle.settings.environment["DYLD_INSERT_LIBRARIES"] = "/x/own.dylib"
+        XCTAssertEqual(try bottle.environment(engine: engine)["DYLD_INSERT_LIBRARIES"], "\(lib.path):/x/own.dylib",
+                       "a library the player inserts stays, after ours")
+        bottle.settings.environment["HB_AUDIOBUF"] = "0"
+        XCTAssertEqual(try bottle.environment(engine: engine)["DYLD_INSERT_LIBRARIES"], "/x/own.dylib", "HB_AUDIOBUF=0 leaves ours out")
+    }
+
     // d3dmetal ships 64-bit only, so 32-bit direct3d 10/11 goes to dxmt after it, not to wined3d
     func testD3DMetalFallsBackToDXMTFor32BitGames() throws {
         let engine = try d3dmetalEngine()

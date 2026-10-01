@@ -798,6 +798,16 @@ public struct Bottle: Sendable {
             env["DISABLE_LSFGM"] = "1"
             if case .unavailable(let reason) = frameGeneration { env["HB_LSFG_UNAVAILABLE"] = reason }
         }
+        // Wine's Mac audio driver let the device pull its whole buffer at once, 10.7 ms at 48 kHz,
+        // more than a game that keeps one 10 ms period queued has, and played the shortfall as
+        // silence: 324 dropouts in two minutes of Counter-Strike 2's menu (highball#127, Deadlock
+        // #187). An engine that ships libhbaudiobuf.dylib gets it inserted into Wine's processes,
+        // where it caps the audio unit's buffer at 5 ms. HB_AUDIOBUF=0 in an environment's
+        // variables leaves it out.
+        if let lib = engine.audioBufferLibrary, env["HB_AUDIOBUF"] != "0" {
+            let inserted = (env["DYLD_INSERT_LIBRARIES"] ?? "").split(separator: ":").map(String.init)
+            env["DYLD_INSERT_LIBRARIES"] = ([lib.path] + inserted.filter { $0 != lib.path }).joined(separator: ":")
+        }
         return env
     }
 

@@ -501,6 +501,12 @@ public struct InstalledEngine: Sendable {
     }
     public var engineDir: URL { root.appending(path: "engine", directoryHint: .isDirectory) }
     public var frameworksDir: URL { root.appending(path: "frameworks", directoryHint: .isDirectory) }
+    /// The library that keeps Wine's audio pulls under half a period (highball#127), when the
+    /// engine ships it as a component. Bottle.environment inserts it into Wine's processes.
+    public var audioBufferLibrary: URL? {
+        let lib = frameworksDir.appending(path: "libhbaudiobuf.dylib")
+        return FileManager.default.fileExists(atPath: lib.path) ? lib : nil
+    }
     public var renderersDir: URL { root.appending(path: "renderers", directoryHint: .isDirectory) }
     public var wineBinary: URL { engineDir.appending(path: "bin/wine") }
     public var wineserverBinary: URL { engineDir.appending(path: "bin/wineserver") }
