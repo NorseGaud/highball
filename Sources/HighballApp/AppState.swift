@@ -734,6 +734,7 @@ final class AppState {
 
     func refresh() {
         executableCache.removeAll()
+        executableMisses.removeAll()
         if !prunedLogsThisRun {
             prunedLogsThisRun = true
             let n = LogPruner.prune(directory: paths.logs)
@@ -1360,10 +1361,15 @@ final class AppState {
     /// Finding it walks the game's folder, so the answer is kept per item until the next
     /// library refresh: views ask on every evaluation.
     private var executableCache: [String: URL] = [:]
+    /// Installed games whose folder holds no program the search recognises, kept for the same
+    /// span: without it a page would walk such a folder five levels deep on every evaluation.
+    private var executableMisses: Set<String> = []
     func programExecutable(for item: LibraryItem) -> URL? {
         if let hit = executableCache[item.id] { return hit }
+        if executableMisses.contains(item.id) { return nil }
         let found = findProgramExecutable(for: item)
         if let found { executableCache[item.id] = found }
+        else if programFolder(for: item) != nil { executableMisses.insert(item.id) }
         return found
     }
     private func findProgramExecutable(for item: LibraryItem) -> URL? {
