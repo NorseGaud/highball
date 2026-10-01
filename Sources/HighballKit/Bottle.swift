@@ -869,6 +869,31 @@ public struct Bottle: Sendable {
     /// has never been validated either: measured on an M1 Pro, a Source D3D9 map load
     /// took 11.1 s with and without it. Both stay because they are individually
     /// defensible, not because they are known to help. Do not restate the old rationale.
+    static let csgoFallback = ["dxvk.enableAsync": "False", "d3d9.maxAvailableMemory": "2048",
+                               "d3d9.customDeviceId": "73BF"]
+
+    /// The generated conf as a launch header quotes it: without the comment lines, and without
+    /// the [csgo.exe] section when it is only the fallback above, which is the same in every
+    /// environment and made a player ask why their World of Warships log mentioned CS:GO
+    /// (Discord, 2026-10-01). A section a recipe set or changed stays, since that is per-game.
+    public static func dxvkConfigHeaderLines(_ conf: String) -> [String] {
+        let fallbackLines = csgoFallback.map { "\($0.key) = \($0.value)" }.sorted()
+        var out: [String] = []
+        var section: [String] = []   // the section being read, its [name] line first
+        func flush() {
+            if !(section.first == "[csgo.exe]" && section.dropFirst().sorted() == fallbackLines) { out += section }
+            section = []
+        }
+        for raw in conf.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+            if line.hasPrefix("[") { flush(); section = [line]; continue }
+            if section.isEmpty { out.append(line) } else { section.append(line) }
+        }
+        flush()
+        return out
+    }
+
     public static func dxvkConfig(async: Bool, appConfig: [String: [String: String]] = [:]) -> String {
         // FALLBACK, kept deliberately (do not delete yet): legacy CS:GO can only be started
         // from Steam's own launch-option chooser, so it never passes the app's Play-gate and a
@@ -881,8 +906,6 @@ public struct Bottle: Sendable {
         // because each is individually sound, not because they fixed it. The same knowledge
         // (recipe dxvkconfig step); recipe-set values OVERRIDE this fallback. Remove after
         // a deprecation window once recipe coverage is the norm.
-        let csgoFallback = ["dxvk.enableAsync": "False", "d3d9.maxAvailableMemory": "2048",
-                            "d3d9.customDeviceId": "73BF"]
         var merged = appConfig
         merged["csgo.exe"] = csgoFallback.merging(merged["csgo.exe"] ?? [:]) { _, recipe in recipe }
 
