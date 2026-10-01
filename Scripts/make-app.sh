@@ -160,7 +160,11 @@ codesign -dv "$APP" 2>&1 | grep -E "Authority=Developer|flags" | head -2 || true
 # Notarize + staple when credentials are stored (xcrun notarytool store-credentials highball ...).
 # Only a release build is notarized: a debug or e2e bundle is ad-hoc signed and stapling it can
 # fail (error 73, 2026-09-13), and it should never look shippable anyway.
-if [ "$CONFIG" = release ] && xcrun notarytool history --keychain-profile highball >/dev/null 2>&1; then
+# The probe talks to Apple, so its failure is not always a missing profile: an expired developer
+# agreement answers 403 here too (2026-10-01), and the old message sent us looking for credentials.
+NOTARY_PROBE=""
+[ "$CONFIG" = release ] && NOTARY_PROBE=$(xcrun notarytool history --keychain-profile highball 2>&1 >/dev/null) && NOTARY_OK=1 || NOTARY_OK=0
+if [ "$CONFIG" = release ] && [ "$NOTARY_OK" = 1 ]; then
   echo "notarizing…"
   ditto -c -k --keepParent "$APP" dist/Highball-notarize.zip
   xcrun notarytool submit dist/Highball-notarize.zip --keychain-profile highball --wait
@@ -171,8 +175,14 @@ else
   if [ "$CONFIG" = "release" ]; then
     # Never ship unnotarized again: 0.1–0.3 went out this way and macOS 15+ showed users
     # the "could not verify it's free of malware" dialog (retro-notarized 2026-08-24).
-    echo "error: release build but no notarytool profile 'highball' — refusing to ship unnotarized." >&2
-    echo "fix: xcrun notarytool store-credentials highball --apple-id <id> --team-id B95M7DARU4" >&2
+    if print -r -- "$NOTARY_PROBE" | grep -q "agreement"; then
+      echo "error: Apple refuses notarization until the developer account accepts its updated agreement — refusing to ship unnotarized." >&2
+      echo "fix: the account holder signs in at https://developer.apple.com/account and accepts the agreement, then run this again" >&2
+    else
+      echo "error: release build but notarytool cannot use the profile 'highball' — refusing to ship unnotarized." >&2
+      echo "notarytool said: ${NOTARY_PROBE:-nothing}" >&2
+      echo "fix: xcrun notarytool store-credentials highball --apple-id <id> --team-id B95M7DARU4" >&2
+    fi
     exit 1
   fi
   echo "note: no notarytool profile 'highball' — skipping notarization (debug build)"
