@@ -142,7 +142,7 @@
     "date": "2026-10-03",
     "macos": "27.0",
     "chip": "Apple M4",
-    "result": "Among Us (64-bit build, DXMT) started 12 of 12 times with its window and no DXMT exception in a Wine 11 environment on this build, the launch that died in 8 of 12 tries on the default engine's r13 before the same fix. Then eight launches through Steam in the same environment each showed the game's window: Red Dead Redemption 2 (loading bar, through the Rockstar launcher), Counter-Strike 2, Overwatch 2 (Blizzard's account link screen on DXMT), Five Nights at Freddy's, Heartopia, Umamusume Pretty Derby, Vindictus (Steam Connector) and Among Us. The engine probe (lasterr) passed on an M1 Pro, macOS 27.0. Nothing was played past those screens."
+    "result": "Among Us (64-bit build, DXMT) started 12 of 12 times with its window and no DXMT exception in a Wine 11 environment on this build, and 12 of 12 on r15 in a control run afterwards, so that game does not show the bug on this Wine (it died in 8 of 12 tries on the default engine's r13 before the same fix, and in none of 12 after). The proof of the fix is that measurement and the code change itself. Then eight launches through Steam in the same environment each showed the game's window: Red Dead Redemption 2 (loading bar, through the Rockstar launcher), Counter-Strike 2, Overwatch 2 (Blizzard's account link screen on DXMT), Five Nights at Freddy's, Heartopia, Umamusume Pretty Derby, Vindictus (Steam Connector) and Among Us. The engine probe (lasterr) passed on an M1 Pro, macOS 27.0. Nothing was played past those screens."
   },
   "direct3D9": "wined3d"
 }
