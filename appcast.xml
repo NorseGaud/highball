@@ -5,6 +5,14 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.10.4</title>
+      <description><![CDATA[The Wine 11 engine gets the DXMT fix (r16, highball#240), nine new games and corrected rows]]></description>
+      <pubDate>Sat, 03 Oct 2026 00:52:11 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.4/Highball-0.10.4.zip" sparkle:version="0.10.4" sparkle:shortVersionString="0.10.4" sparkle:edSignature="wRl6Kez10uqiO9bZMzuFlwCFX8ytM2lqC3xKvnDfKI1IScfZnLTuHQUiD1jbLyq9X1DefhyVxK1ZA+LuY/cICA==" length="4269388" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.10.3</title>
       <description><![CDATA[Sound no longer drops out in games that keep little audio queued, the Rockstar Games Launcher installs again on the Wine 11 engine, and a game that needs that engine gets its newest revision]]></description>
       <pubDate>Fri, 02 Oct 2026 21:27:30 +0200</pubDate>
