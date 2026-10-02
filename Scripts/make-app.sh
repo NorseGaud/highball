@@ -28,6 +28,11 @@ for f in glob.glob("Sources/HighballApp/*.swift"):
 missing = sorted(used - set(keys))
 if missing: print(f"warning: {len(missing)} L() strings without a French line (English shows instead):", missing)
 PY
+# SwiftPM's Bundle.module accessor looks for the resource bundle next to the executable or at the
+# absolute build path of the machine that compiled it, never under Contents/Resources, so an app
+# that reads it runs on the builder's Mac and crashes at launch everywhere else (PR #230,
+# 2026-10-01). App resources go through Bundle.main, from the files this script copies.
+if grep -rq "Bundle\.module" Sources/HighballApp; then echo "error: Sources/HighballApp reads Bundle.module; use Bundle.main and copy the file here" >&2; exit 1; fi
 swift build -c "$CONFIG" --product HighballApp
 APP=dist/Highball.app
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"

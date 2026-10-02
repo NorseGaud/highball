@@ -55,14 +55,17 @@ run unit swift test
 run upgrade Scripts/upgrade-smoke.sh --screen
 run firstrun Scripts/firstrun-smoke.sh --screen
 run launch-window Scripts/launch-window-smoke.sh
+# Engine probes (Scripts/engine-probe-smoke.sh): one Windows program per Wine-on-macOS patch,
+# run in a throwaway environment on the newest Wine 11 engine this build ships. Required since
+# 2026-10-02: engines r11 to r14 shipped with GetLastError returning a pointer after any window
+# callback, the Rockstar Games Launcher refused to install on them for two weeks, and the probe
+# of the day made no display call, so the gate never saw it (highball-db#272).
+run engine-probe Scripts/engine-probe-smoke.sh
 echo "gate: advisory checks"
 run game Scripts/game-smoke.sh
 # Advisory until its false-fail rate is zero, like every new check: the process-environment
 # invariant behind the 2026-09-18 launcher fixes (see Scripts/env-invariant-smoke.sh).
 run env-invariant Scripts/env-invariant-smoke.sh
-# Engine probes (Scripts/engine-probe-smoke.sh): one Windows program per Wine-on-macOS patch,
-# run in an environment on the engine that carries it. lasterr covers patch 0011 (r11+).
-run engine-probe Scripts/engine-probe-smoke.sh
 [ $WITH_RENDER = 1 ] && run render Scripts/render-smoke.sh
 
 passed=true
