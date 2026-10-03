@@ -1162,8 +1162,12 @@ final class AppState {
             }))
     }
 
+    /// Steam counts as installed when its steam.exe is a Windows executable, not merely a file: an
+    /// empty or truncated one, the leftover of an interrupted self-update, showed Open Steam and
+    /// then a crash alert proposing another graphics mode (highball#245). Now the row offers the
+    /// installer again, which writes a fresh client over it and keeps the rest of the folder.
     func steamInstalled(in bottle: Bottle) -> Bool {
-        FileManager.default.fileExists(atPath: bottle.driveC.appending(path: "Program Files (x86)/Steam/steam.exe").path)
+        PEExportName.isWindowsExecutable(at: bottle.driveC.appending(path: "Program Files (x86)/Steam/steam.exe"))
     }
 
     /// A game the row says needs D3DMetal, on an engine where it is not enabled yet: Play asks
@@ -1831,6 +1835,13 @@ final class AppState {
                 }
                 return SessionWatch.isAlive(markers: markers, ps: await Self.processList())
             } crashed: { result in
+                // A program whose file is not a Windows executable never ran: Wine's loader hands
+                // it to start.exe, which reports "File not found" within seconds. Another graphics
+                // mode cannot help, so say what is wrong instead of proposing one (highball#245).
+                guard PEExportName.isWindowsExecutable(at: pin.executableURL(driveC: bottle.driveC)) else {
+                    self.appendLog("\(pin.name) did not start: its file is not a Windows program (empty or cut short), so Wine could not run it. Install it again; for Steam, the Steam row offers the installer.")
+                    return
+                }
                 let current = pin.renderer ?? bottle.settings.renderer
                 self.crashSuggestion = CrashSuggestion(program: pin.name, bottleName: bottle.name,
                                                        renderer: Renderer.suggestion(after: current, d3dmetalAvailable: engine.rendererDir("d3dmetal") != nil, vkd3dAvailable: engine.rendererDir("vkd3d") != nil),
