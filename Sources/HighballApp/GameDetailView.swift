@@ -54,7 +54,7 @@ struct GameDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(BottleBackdrop())
-        .navigationTitle(item.title)
+        .navigationTitle(state.displayTitle(item))
         .sheet(isPresented: $showBottleSettings) {
             if let bottle { BottleSettingsSheet(bottle: bottle) }
         }
@@ -88,7 +88,7 @@ struct GameDetailView: View {
                 .clipped()
             LinearGradient(colors: [.black.opacity(0.8), .clear], startPoint: .bottom, endPoint: .center)
                 .frame(maxWidth: 640)
-            Text(item.title)
+            Text(state.displayTitle(item))
                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundStyle(.white).shadow(radius: 4)
                 .padding(14)

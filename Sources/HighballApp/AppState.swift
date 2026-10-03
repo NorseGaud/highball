@@ -237,12 +237,48 @@ final class AppState {
     var libraryStore: LibraryStore { LibraryStore(paths: paths) }
 
     func rebuildLibrary() {
+        customNames = nameStore.names()
         libraryItems = LibraryIndex.build(bottles: bottles, steamByBottle: gamesByBottle,
                                           steamOwnedByBottle: steamOwnedByBottle, macInstalled: macSteamGames,
                                           epicOwned: epicOwned, epicInstalls: epicInstalls,
                                           plays: libraryPlays)
+        sortLibraryByDisplayTitle()
         if let deferred = deferredPlayLink { resolvePlayLink(deferred.request) }
         refreshMacFlags()
+    }
+
+    // MARK: Names people give their games
+
+    /// Custom names by item id (NameStore). A renamed game sorts, searches and shows under its
+    /// new name; the store's own title stays the key for the database and for Steam.
+    var customNames: [String: String] = [:]
+    var nameStore: NameStore { NameStore(paths: paths) }
+    /// The tile whose rename field is open, and the text in it.
+    var renaming: LibraryItem?
+    var renameText = ""
+
+    func displayTitle(_ item: LibraryItem) -> String { customNames[item.id] ?? item.title }
+
+    func beginRename(_ item: LibraryItem) {
+        renameText = displayTitle(item)
+        renaming = item
+    }
+
+    /// Saves the name in the field; a blank resets to the store's title.
+    func rename(_ item: LibraryItem, to name: String) {
+        do {
+            try nameStore.setName(name, for: item.id)
+            customNames = nameStore.names()
+            sortLibraryByDisplayTitle()
+        } catch { fail(error) }
+        renaming = nil
+    }
+
+    func resetName(for item: LibraryItem) { rename(item, to: "") }
+
+    private func sortLibraryByDisplayTitle() {
+        guard !customNames.isEmpty else { return }
+        libraryItems.sort { displayTitle($0).localizedCaseInsensitiveCompare(displayTitle($1)) == .orderedAscending }
     }
 
     // MARK: Mac builds on Steam

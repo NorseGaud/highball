@@ -29,7 +29,8 @@ struct LibraryView: View {
             if verifiedOnly {
                 guard state.gameDB.entry(for: item)?.status == "verified-local" else { return false }
             }
-            if !search.isEmpty && !item.title.localizedCaseInsensitiveContains(search) { return false }
+            if !search.isEmpty && !item.title.localizedCaseInsensitiveContains(search)
+                && !state.displayTitle(item).localizedCaseInsensitiveContains(search) { return false }
             return true
         }
     }
@@ -274,7 +275,7 @@ struct LibraryTile: View {
                 .scaleEffect(hovering ? 1.02 : 1)
                 .shadow(color: .black.opacity(hovering ? 0.4 : 0.2), radius: hovering ? 12 : 5, y: 3)
 
-                Text(item.title)
+                Text(state.displayTitle(item))
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
                     .foregroundStyle(.primary)
@@ -303,6 +304,15 @@ struct LibraryTile: View {
             hovering = false
         }
         .help(Self.tooltip(entry?.notes) ?? item.title)
+        // The rename field, on the tile being renamed only. A blank name is a reset.
+        .alert(L("Rename"), isPresented: Binding(get: { state.renaming?.id == item.id },
+                                                  set: { if !$0 { state.renaming = nil } })) {
+            TextField(L("Name"), text: Binding(get: { state.renameText }, set: { state.renameText = $0 }))
+            Button(L("Rename")) { state.rename(item, to: state.renameText) }
+            Button(L("Cancel"), role: .cancel) { state.renaming = nil }
+        } message: {
+            Text(String(format: L("The store keeps calling it %@. Leave the field empty to go back to that name."), item.title))
+        }
         .contextMenu {
             if let appid = item.steamAppID, let running = state.session(forAppID: appid) {
                 Button(L("Stop")) { state.stopSession(running) }
@@ -315,6 +325,10 @@ struct LibraryTile: View {
             Button(L("Choose cover image…")) { state.chooseCover(for: item) }
             if state.coverStore.coverURL(for: item.id) != nil {
                 Button(L("Reset cover")) { state.resetCover(for: item) }
+            }
+            Button(L("Rename…")) { state.beginRename(item) }
+            if state.customNames[item.id] != nil {
+                Button(L("Reset name")) { state.resetName(for: item) }
             }
             // A program someone added by hand leaves the library from its tile, not only from
             // the environment's programs list (highball-db#68). Steam and Epic entries follow

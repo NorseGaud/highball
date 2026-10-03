@@ -261,6 +261,10 @@ enum L10n {
         "Windows program": "Programme Windows",
         "Choose cover image…": "Choisir une image de couverture…",
         "Reset cover": "Réinitialiser la couverture",
+        "Rename…": "Renommer…",
+        "Rename": "Renommer",
+        "Reset name": "Rétablir le nom",
+        "The store keeps calling it %@. Leave the field empty to go back to that name.": "La boutique continue de l’appeler %@. Laissez le champ vide pour revenir à ce nom.",
         "Choose a cover image for %@": "Choisir une image de couverture pour %@",
         "Apply %@ fix": "Appliquer le correctif %@",
         "%@ needs a one-time setup to run the way it was verified.":
