@@ -11,8 +11,23 @@ public struct SteamGame: Identifiable, Sendable, Hashable {
     /// Steam's own LastPlayed from the ACF (unix seconds; 0 = never). Seeds the library's
     /// Continue shelf so it works on first run and tracks plays Steam started without us.
     public let lastPlayed: Date?
+    /// The Steam library folder the game is installed in, the directory holding `steamapps`.
+    /// Steam keeps more than one, the second often on an external disk, so the install path
+    /// cannot be derived from the bottle alone. nil for a game built without one.
+    public let libraryRoot: URL?
+
+    public init(appid: Int, name: String, installdir: String, sizeOnDisk: Int64, stateFlags: Int, lastPlayed: Date?,
+                libraryRoot: URL? = nil) {
+        self.appid = appid; self.name = name; self.installdir = installdir; self.sizeOnDisk = sizeOnDisk
+        self.stateFlags = stateFlags; self.lastPlayed = lastPlayed; self.libraryRoot = libraryRoot
+    }
 
     public var id: Int { appid }
+    /// Where the game's files are, when the library folder is known.
+    public var installFolder: URL? {
+        guard let libraryRoot, !installdir.isEmpty else { return nil }
+        return libraryRoot.appending(path: "steamapps/common/\(installdir)", directoryHint: .isDirectory)
+    }
     /// StateFlags 4 = fully installed; anything else is updating/downloading/broken.
     public var isReady: Bool { stateFlags == 4 }
 
@@ -33,20 +48,75 @@ public enum SteamLibrary {
         return FileManager.default.fileExists(atPath: root.appending(path: "steam.exe").path) ? root : nil
     }
 
-    /// All games known to the bottle's Steam library folders.
+    /// All games known to the bottle's Steam library folders: the one inside the environment and
+    /// every folder Steam's library list adds to it.
     public static func games(in bottle: Bottle) -> [SteamGame] {
         guard let root = steamRoot(of: bottle) else { return [] }
-        let steamapps = root.appending(path: "steamapps")
-        guard let entries = try? FileManager.default.contentsOfDirectory(at: steamapps, includingPropertiesForKeys: nil) else { return [] }
-        return entries
-            .filter { $0.lastPathComponent.hasPrefix("appmanifest_") && $0.pathExtension == "acf" }
-            .compactMap { parseManifest($0) }
-            .filter { $0.appid != 228980 } // Steamworks Common Redistributables — not a game
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return games(steamRoot: root, bottleURL: bottle.url)
+    }
+
+    static func games(steamRoot root: URL, bottleURL: URL) -> [SteamGame] {
+        var seen = Set<Int>(), games: [SteamGame] = []
+        for library in libraryFolders(steamRoot: root, bottleURL: bottleURL) {
+            let steamapps = library.appending(path: "steamapps")
+            guard let entries = try? FileManager.default.contentsOfDirectory(at: steamapps, includingPropertiesForKeys: nil) else { continue }
+            for url in entries where url.lastPathComponent.hasPrefix("appmanifest_") && url.pathExtension == "acf" {
+                guard let game = parseManifest(url, libraryRoot: library),
+                      game.appid != 228980,                       // Steamworks Common Redistributables, not a game
+                      seen.insert(game.appid).inserted else { continue }   // the environment's own copy wins
+                games.append(game)
+            }
+        }
+        return games.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// The Steam library folders of a bottle: the one inside the environment first, then the
+    /// ones Steam's `libraryfolders.vdf` names, in Steam's order. Steam writes those as Windows
+    /// paths (`D:\SteamLibrary`), which the bottle's drive letters turn back into Mac paths; a
+    /// letter the bottle does not map, or a folder that is not there (an external disk left at
+    /// home), is skipped. Before this a game installed in a second library folder never reached
+    /// the library at all (highball-db#316, a Steam library on /Volumes/MEDIA_DEV).
+    static func libraryFolders(steamRoot root: URL, bottleURL: URL) -> [URL] {
+        var folders = [root.standardizedFileURL]
+        let vdf = root.appending(path: "steamapps/libraryfolders.vdf")
+        guard let text = try? String(contentsOf: vdf, encoding: .utf8) else { return folders }
+        for path in libraryPaths(in: text) {
+            guard let url = unixURL(windowsPath: path, bottleURL: bottleURL)?.standardizedFileURL,
+                  !folders.contains(url),
+                  FileManager.default.fileExists(atPath: url.appending(path: "steamapps").path) else { continue }
+            folders.append(url)
+        }
+        return folders
+    }
+
+    /// The `"path"` values of a libraryfolders.vdf, their doubled backslashes made single.
+    static func libraryPaths(in text: String) -> [String] {
+        text.matches(of: #/"path"\s+"([^"]*)"/#).map { String($0.1).replacingOccurrences(of: "\\\\", with: "\\") }
+    }
+
+    /// A Windows path through the bottle's drive letters: `dosdevices/d:` is a symlink to the Mac
+    /// folder the letter stands for (`c:` to `../drive_c`, `z:` to `/`), so the path's components
+    /// go on the end of that. nil for a letter the bottle does not map.
+    static func unixURL(windowsPath: String, bottleURL: URL) -> URL? {
+        let parts = windowsPath.split(separator: "\\", omittingEmptySubsequences: true).map(String.init)
+        guard let drive = parts.first, drive.count == 2, drive.hasSuffix(":"), let letter = drive.first?.lowercased() else { return nil }
+        let dosdevices = bottleURL.appending(path: "dosdevices", directoryHint: .isDirectory)
+        var base: URL
+        if let dest = try? FileManager.default.destinationOfSymbolicLink(atPath: dosdevices.appending(path: "\(letter):").path) {
+            base = dest.hasPrefix("/") ? URL(fileURLWithPath: dest, isDirectory: true) : dosdevices.appending(path: dest, directoryHint: .isDirectory)
+        } else if letter == "c" {
+            base = bottleURL.appending(path: "drive_c", directoryHint: .isDirectory)
+        } else if letter == "z" {
+            base = URL(fileURLWithPath: "/", isDirectory: true)
+        } else {
+            return nil
+        }
+        for part in parts.dropFirst() { base = base.appending(path: part, directoryHint: .isDirectory) }
+        return base
     }
 
     /// Minimal ACF (Valve KeyValues) reader: flat `"key" "value"` pairs are all we need.
-    static func parseManifest(_ url: URL) -> SteamGame? {
+    static func parseManifest(_ url: URL, libraryRoot: URL? = nil) -> SteamGame? {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         var fields: [String: String] = [:]
         let pattern = #/"([A-Za-z]+)"\s+"([^"]*)"/#
@@ -61,7 +131,8 @@ public enum SteamLibrary {
             installdir: fields["installdir"] ?? "",
             sizeOnDisk: Int64(fields["SizeOnDisk"] ?? "") ?? 0,
             stateFlags: Int(fields["StateFlags"] ?? "") ?? 0,
-            lastPlayed: played > 0 ? Date(timeIntervalSince1970: played) : nil
+            lastPlayed: played > 0 ? Date(timeIntervalSince1970: played) : nil,
+            libraryRoot: libraryRoot
         )
     }
 }

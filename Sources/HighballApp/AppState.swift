@@ -1432,7 +1432,7 @@ final class AppState {
         switch item.source {
         case .steam:
             guard let game = gamesByBottle[bottleName]?.first(where: { $0.appid == item.steamAppID }), !game.installdir.isEmpty else { return nil }
-            folder = bottle.driveC.appending(path: "Program Files (x86)/Steam/steamapps/common/\(game.installdir)", directoryHint: .isDirectory)
+            folder = game.installFolder ?? bottle.driveC.appending(path: "Program Files (x86)/Steam/steamapps/common/\(game.installdir)", directoryHint: .isDirectory)
         case .epic:
             folder = item.epicAppName.flatMap { epicInstalls[$0] }.map { URL(fileURLWithPath: $0, isDirectory: true) }
         case .pin:
