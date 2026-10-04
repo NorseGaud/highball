@@ -47,6 +47,9 @@ final class BundledEngineTests: XCTestCase {
     /// 2026-09-30 so a game gets its focus back after the player leaves it (highball#182), and
     /// wineserver and ntdll.so on 2026-10-01 so msync stops leaking wait registrations (highball#224),
     /// and the audio buffer library is added the same day so games stop dropping sound (highball#127).
+    /// On 2026-10-03 ntdll.so is replaced again (wineserver comes from the same archive) so data
+    /// execution prevention stays on under Rosetta, where Wine turning it off made every write to
+    /// an executable page fault (highball#165).
     /// Everything else is byte-identical, so it is not downloaded again, and every new archive
     /// comes from Highball's own release pages (a component URL has to be ours to stay immutable,
     /// #27/#28).
@@ -59,7 +62,8 @@ final class BundledEngineTests: XCTestCase {
             }
         }
         func one(_ id: String) throws -> EngineManifest { try XCTUnwrap(all.first { $0.id == id }, "\(id) missing") }
-        for (current, baseID) in [("x64-sikarugir10.0_6-r19", "x64-sikarugir10.0_6-r5"), ("x64-sikarugir10.0_6-r20", "x64-sikarugir10.0_6-r6")] {
+        for (current, baseID) in [("x64-sikarugir10.0_6-r19", "x64-sikarugir10.0_6-r5"), ("x64-sikarugir10.0_6-r21", "x64-sikarugir10.0_6-r5"),
+                                  ("x64-sikarugir10.0_6-r20", "x64-sikarugir10.0_6-r6")] {
             let r = try one(current), base = try one(baseID)
             XCTAssertEqual(r.minMacOS, base.minMacOS, "\(current) must keep \(baseID)'s floor")
             XCTAssertEqual(r.baseEnv?["D3DM_MTL4"], base.baseEnv?["D3DM_MTL4"], "\(current) must keep \(baseID)'s Metal 4 setting")
@@ -85,12 +89,14 @@ final class BundledEngineTests: XCTestCase {
                           "\(current)'s driver must come from Highball's own release page: \(winemac.url)")
 
             // The msync fix is byte edits to the same archive's wineserver and ntdll.so
-            // (Scripts/build-wine10-msync.sh), one archive behind two single-file components.
+            // (Scripts/build-wine10-msync.sh), one archive behind two single-file components. r21's
+            // archive (Scripts/build-wine10-dep.sh) carries those edits plus the DEP one.
+            let archive = current == "x64-sikarugir10.0_6-r21" ? "wine10-dep-" : "wine10-msync-"
             for (name, into) in [("wineserver", "engine/bin/wineserver"), ("ntdll-unix", "engine/lib/wine/x86_64-unix/ntdll.so")] {
                 let c = try XCTUnwrap(r.components[name])
                 XCTAssertEqual(c.extract?.into, into, "\(current)/\(name) replaces one file, the Wine archive's own")
                 XCTAssertGreaterThan(c.order ?? 0, r.components["wine"]?.order ?? 0, "\(current)/\(name) must unpack after the Wine archive")
-                XCTAssertTrue(c.url.absoluteString.hasPrefix("https://github.com/gauthierpiarrette/highball-engine/releases/download/wine10-msync-"),
+                XCTAssertTrue(c.url.absoluteString.hasPrefix("https://github.com/gauthierpiarrette/highball-engine/releases/download/\(archive)"),
                               "\(current)/\(name) must come from Highball's own release page: \(c.url)")
             }
             XCTAssertEqual(r.components["wineserver"]?.sha256, r.components["ntdll-unix"]?.sha256, "both files come from one archive, downloaded once")
@@ -103,15 +109,16 @@ final class BundledEngineTests: XCTestCase {
             XCTAssertTrue(audio.url.absoluteString.hasPrefix("https://github.com/gauthierpiarrette/highball-engine/releases/download/audiobuf-"),
                           "\(current)'s audio library must come from Highball's own release page: \(audio.url)")
         }
-        XCTAssertEqual(all.last?.id, "x64-sikarugir10.0_6-r19", "r19 is the default engine")
-        // The update to r19 moves r17 environments straight over, and leaves GPTK 4 ones (r18) for
-        // their own line's r20, which is where the walk must send them.
+        XCTAssertEqual(all.last?.id, "x64-sikarugir10.0_6-r21", "r21 is the default engine")
+        // The update to r21 moves r17 and r19 environments straight over, and leaves GPTK 4 ones (r18)
+        // for their own line's r20, which is where the walk must send them.
         let shipped = Set(all.flatMap { $0.components.keys })
-        XCTAssertTrue(EngineStore.canMoveBottle(on: try one("x64-sikarugir10.0_6-r17"), to: try one("x64-sikarugir10.0_6-r19"), shipped: shipped))
-        XCTAssertFalse(EngineStore.canMoveBottle(on: try one("x64-sikarugir10.0_6-r18"), to: try one("x64-sikarugir10.0_6-r19"), shipped: shipped))
+        XCTAssertTrue(EngineStore.canMoveBottle(on: try one("x64-sikarugir10.0_6-r17"), to: try one("x64-sikarugir10.0_6-r21"), shipped: shipped))
+        XCTAssertTrue(EngineStore.canMoveBottle(on: try one("x64-sikarugir10.0_6-r19"), to: try one("x64-sikarugir10.0_6-r21"), shipped: shipped))
+        XCTAssertFalse(EngineStore.canMoveBottle(on: try one("x64-sikarugir10.0_6-r18"), to: try one("x64-sikarugir10.0_6-r21"), shipped: shipped))
         XCTAssertEqual(EngineStore.successor(for: try one("x64-sikarugir10.0_6-r18"), among: all, shipped: shipped, macOS: "27.0")?.id,
                        "x64-sikarugir10.0_6-r20")
-        for rollback in ["x64-sikarugir10.0_6-r13", "x64-sikarugir10.0_6-r15", "x64-sikarugir10.0_6-r17"] {
+        for rollback in ["x64-sikarugir10.0_6-r13", "x64-sikarugir10.0_6-r15", "x64-sikarugir10.0_6-r17", "x64-sikarugir10.0_6-r19"] {
             XCTAssertNotNil(all.first { $0.id == rollback }, "\(rollback) stays offered for rollback")
         }
     }
