@@ -50,6 +50,21 @@ public struct LibraryItem: Identifiable, Sendable, Hashable {
 }
 
 public enum LibraryIndex {
+    /// The installed games in the order the Home row shows them: the ones played most recently
+    /// first, then the rest by title, so the row reads as "what you were playing, then what you
+    /// have" (highball#252, from PR #230). Owned-but-not-installed games stay out; they belong to
+    /// the grid, where the download arrow says what they are.
+    public static func installedForHome(_ items: [LibraryItem]) -> [LibraryItem] {
+        items.filter(\.installedAnywhere).sorted { a, b in
+            switch (a.lastPlayed, b.lastPlayed) {
+            case let (x?, y?) where x != y: return x > y
+            case (.some, .none): return true
+            case (.none, .some): return false
+            default: return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
+            }
+        }
+    }
+
     /// Launcher pins are infrastructure, not games — they never appear in the library, and
     /// launching one is not "playing" for the Continue shelf. Single source of truth for the
     /// filter BottleView's Programs section shares.

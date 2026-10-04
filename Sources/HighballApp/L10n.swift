@@ -246,6 +246,7 @@ enum L10n {
         // One Library (Phase 2)
         "Library": "Bibliothèque",
         "Continue playing": "Reprendre",
+        "Installed games": "Jeux installés",
         "Search your games": "Rechercher vos jeux",
         "All": "Tous",
         "No bottles yet. A bottle is a private Windows environment for your games.":

@@ -14,18 +14,17 @@ struct LibraryView: View {
     @Environment(\.openSettings) private var openSettings
     @State private var search = ""
     @State private var sourceFilter: LibrarySource?
-    /// On by default so the owned Steam library (highball#199) doesn't change what the library
-    /// shows until someone asks for it; switching Installed off reveals owned games.
-    @State private var installedOnly = true
-    /// Until the chip is touched, Installed hides only Steam's owned-only games: Epic's owned
-    /// games keep showing as they always have (#205). Once touched it applies to every source.
-    @State private var installedTouched = false
+    /// Off by default since the Home row (highball#252): installed games lead the screen in their
+    /// own row, so the owned library below them is what the grid is for. On, it keeps every store
+    /// to its installed games alike; it used to let Epic's owned games through until touched, and
+    /// that read as a bug (highball#257).
+    @State private var installedOnly = false
     @State private var verifiedOnly = false
 
     private var filtered: [LibraryItem] {
         state.libraryItems.filter { item in
             if let sourceFilter, item.source != sourceFilter { return false }
-            if installedOnly && !item.installedAnywhere && (installedTouched || item.source == .steam) { return false }
+            if installedOnly && !item.installedAnywhere { return false }
             if verifiedOnly {
                 guard state.gameDB.entry(for: item)?.status == "verified-local" else { return false }
             }
@@ -35,26 +34,32 @@ struct LibraryView: View {
         }
     }
 
-    /// Only once the grid needs it: with a handful of games the row would repeat every tile.
-    private var continueItems: [LibraryItem] {
-        guard state.libraryItems.count > 6 else { return [] }
-        return state.libraryItems
-            .filter { $0.lastPlayed != nil && $0.installedAnywhere }
-            .sorted { ($0.lastPlayed ?? .distantPast) > ($1.lastPlayed ?? .distantPast) }
-            .prefix(10).map { $0 }
+    /// The Home row: installed games, the most recently played first (highball#252, the first
+    /// piece taken from PR #230). Only once the grid holds more than the row, with a handful of
+    /// games and nothing owned besides them the row would repeat every tile.
+    private var homeItems: [LibraryItem] {
+        let installed = LibraryIndex.installedForHome(state.libraryItems)
+        guard state.libraryItems.count > 6, state.libraryItems.count > installed.count else { return [] }
+        return installed
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
                 filterBar
-                if !continueItems.isEmpty && search.isEmpty && sourceFilter == nil {
+                // Installed games first, large, with Play on the cover. The verdict stays under
+                // every cover, the grid below keeps every game, and the row steps aside as soon as
+                // a search or a filter is on.
+                if !homeItems.isEmpty && search.isEmpty && sourceFilter == nil && !installedOnly && !verifiedOnly {
                     VStack(alignment: .leading, spacing: 12) {
-                        HB.eyebrow(L("Continue playing"))
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            HB.eyebrow(L("Installed games"))
+                            Text("\(homeItems.count)").font(.caption.monospaced()).foregroundStyle(.tertiary)
+                        }
                         ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(spacing: 14) {
-                                ForEach(continueItems) { item in
-                                    LibraryTile(item: item, entry: entry(for: item), width: 128)
+                            LazyHStack(spacing: 16) {
+                                ForEach(homeItems) { item in
+                                    LibraryTile(item: item, entry: entry(for: item), width: 176, playOnCover: true)
                                 }
                             }
                             // Room inside the clip for a hovered tile's scale, stroke and shadow,
@@ -101,7 +106,7 @@ struct LibraryView: View {
             FilterChip(label: "Epic", on: sourceFilter == .epic) { sourceFilter = .epic }
             FilterChip(label: L("Programs"), on: sourceFilter == .pin) { sourceFilter = .pin }
             Divider().frame(height: 16)
-            FilterChip(label: L("Installed"), on: installedOnly) { installedOnly.toggle(); installedTouched = true }
+            FilterChip(label: L("Installed"), on: installedOnly) { installedOnly.toggle() }
             FilterChip(label: L("Verified"), on: verifiedOnly) { verifiedOnly.toggle() }
             Spacer()
         }
@@ -210,6 +215,9 @@ struct LibraryTile: View {
     let item: LibraryItem
     let entry: GameDBEntry?
     var width: CGFloat? = nil
+    /// The Home row shows Play on the cover without a hover, as a visible control, where the
+    /// grid keeps it for the hover so covers stay clean at a glance.
+    var playOnCover = false
     @State private var hovering = false
     @State private var coverDropTargeted = false
 
@@ -258,6 +266,24 @@ struct LibraryTile: View {
                             .foregroundStyle(.white.opacity(0.85))
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                             .padding(6)
+                    }
+                    // The visible Play of the Home row, bottom right, clear of the badge and of
+                    // the Running pill. The hover overlay above takes over while the pointer is in.
+                    if playOnCover && playable && !hovering && !isRunning {
+                        Button { state.play(item) } label: {
+                            ZStack {
+                                Circle().fill(HB.amber).frame(width: 34, height: 34)
+                                    .shadow(color: .black.opacity(0.45), radius: 6, y: 2)
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(Color(red: 0.13, green: 0.08, blue: 0.01))
+                                    .offset(x: 1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(String(format: L("Play %@"), state.displayTitle(item)))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(8)
                     }
                 }
                 .aspectRatio(2 / 3, contentMode: .fit)
@@ -350,6 +376,7 @@ struct LibraryTile: View {
     }
 
     private var verdict: (String, Color)? { verdictLabel(entry?.status) }
+    private var isRunning: Bool { item.steamAppID.map { state.session(forAppID: $0) != nil } ?? false }
 }
 
 /// Shared verdict mapping (was embedded in GameCard).
