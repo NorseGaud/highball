@@ -5,6 +5,14 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.10.5</title>
+      <description><![CDATA[The Wine 11 engine keeps DEP on (r17, far faster Direct3D 9 through DXVK), a Steam left broken by an interrupted update offers its installer again, games can be renamed, Rockstar recipes offer the current engine, nine new games]]></description>
+      <pubDate>Sun, 04 Oct 2026 23:55:20 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.5/Highball-0.10.5.zip" sparkle:version="0.10.5" sparkle:shortVersionString="0.10.5" sparkle:edSignature="c2LwaWLid4301gP3gYoD4e4fw/aKU5OoEuHV8uL4lOgmmPVJBn7z0G6LVbfbQyqEZ/K4EGTqCd2VgPUkjmonAg==" length="4315164" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.10.4</title>
       <description><![CDATA[The Wine 11 engine gets the DXMT fix (r16, highball#240), nine new games and corrected rows]]></description>
       <pubDate>Sat, 03 Oct 2026 00:52:11 +0200</pubDate>
