@@ -25,9 +25,10 @@ public enum EngineIntegrity {
         "comctl32.dll", "comdlg32.dll", "winmm.dll", "win32u.dll", "sechost.dll", "crypt32.dll",
     ]
 
-    /// Where an engine keeps its builtins, 64-bit half first.
-    public static func libraryDirectories(engineRoot: URL) -> [URL] {
-        ["engine/lib/wine/x86_64-windows", "engine/lib/wine/i386-windows"]
+    /// Where an engine keeps its builtins, 64-bit half first. The 64-bit directory follows the
+    /// engine's architecture (`aarch64-windows` on the arm64 line).
+    public static func libraryDirectories(engineRoot: URL, arch: String = "x86_64") -> [URL] {
+        ["engine/lib/wine/\(EngineManifest.pe64LibDir(arch: arch))", "engine/lib/wine/\(EngineManifest.pe32LibDir)"]
             .map { engineRoot.appending(path: $0, directoryHint: .isDirectory) }
     }
 
@@ -46,8 +47,8 @@ public enum EngineIntegrity {
 
     /// Of the DLLs Wine could not find, its own that are absent from this engine on disk.
     /// Empty when the engine is intact, which is the normal answer.
-    public static func gone(fromEngineAt root: URL, notFound: [String]) -> [String] {
-        let dirs = libraryDirectories(engineRoot: root)
+    public static func gone(fromEngineAt root: URL, notFound: [String], arch: String = "x86_64") -> [String] {
+        let dirs = libraryDirectories(engineRoot: root, arch: arch)
         return notFound.filter { name in
             builtins.contains(name) && !dirs.contains { FileManager.default.fileExists(atPath: $0.appending(path: name).path) }
         }

@@ -63,6 +63,27 @@ public struct EngineManifest: Codable, Sendable, Identifiable {
     }
     public var requires: [String]?
     public var notes: [String]?
+
+    // MARK: Architecture
+
+    /// The Unix side of this engine is native arm64 code: Wine's own builtins are ARM64X images in
+    /// `aarch64-windows`, x86 and x86-64 programs run through FEX inside Wine, and the loader is
+    /// Highball's signed helper (WineLoaderHelper) rather than the engine's own binary. Every other
+    /// engine is Intel code that runs under Rosetta (private/notes/rosetta-transition-plan.md).
+    public var isNativeARM64: Bool { arch == "arm64" }
+    /// Whether the engine needs Rosetta at all. The Intel engines say so in `requires`; an engine
+    /// that does not is installed, offered and run without a word about Rosetta.
+    public var requiresRosetta: Bool { (requires ?? []).contains("rosetta2") }
+    /// The directory under `lib/wine` of the Unix halves of Wine's builtins (`ntdll.so`, `winemac.so`).
+    public var unixLibDir: String { Self.unixLibDir(arch: arch) }
+    /// The directory under `lib/wine` of the 64-bit PE builtins and of a renderer overlay's 64-bit
+    /// DLLs: ARM64X images on an arm64 engine, which carry the ARM64EC code x86-64 programs call
+    /// into, x86-64 images otherwise.
+    public var pe64LibDir: String { Self.pe64LibDir(arch: arch) }
+    /// The 32-bit PE builtins, the same directory on both: 32-bit programs run through WoW64.
+    public static let pe32LibDir = "i386-windows"
+    public static func unixLibDir(arch: String) -> String { arch == "arm64" ? "aarch64-unix" : "x86_64-unix" }
+    public static func pe64LibDir(arch: String) -> String { arch == "arm64" ? "aarch64-windows" : "x86_64-windows" }
     /// Which Direct3D 9 a game gets in the automatic modes (DXMT, D3DMetal): nil attaches DXVK's
     /// d3d9 (the d9vk overlay) beside the Metal backend, "wined3d" leaves Direct3D 9 to Wine's
     /// own, because on this engine that is the fast path. Measured on the Wine 11 tree: Half-Life

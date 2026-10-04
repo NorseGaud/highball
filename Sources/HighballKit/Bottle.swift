@@ -52,7 +52,7 @@ public enum Renderer: String, Codable, CaseIterable, Sendable {
                 overlays = shim.appending(path: "wine").path + ":" + overlays
                 // The shim loads D3DMetal's d3d12.dll by this path: under its own name the real one
                 // would come back as the shim (see InstalledEngine.timestampShimDir for the layout).
-                env["HB_D3D12_REAL"] = "Z:" + shim.appending(path: "wine/x86_64-windows/\(InstalledEngine.shimRealName).dll").path.replacingOccurrences(of: "/", with: "\\")
+                env["HB_D3D12_REAL"] = "Z:" + shim.appending(path: "wine/\(engine.manifest.pe64LibDir)/\(InstalledEngine.shimRealName).dll").path.replacingOccurrences(of: "/", with: "\\")
             }
             // d3dmetal is 64-bit only, so 32-bit d3d10/11 falls through to dxmt instead of wined3d
             if let dxmt = engine.rendererDir("dxmt") { overlays += ":" + dxmt.appending(path: "wine").path }
@@ -683,7 +683,8 @@ public struct Bottle: Sendable {
         case .msync: env["WINEMSYNC"] = "1"; env["WINEESYNC"] = "0"
         }
         if settings.metalHUD { env["MTL_HUD_ENABLED"] = "1" }
-        if settings.advertiseAVX { env["ROSETTA_ADVERTISE_AVX"] = "1" }
+        // Rosetta's switch: on an arm64 engine x86 code runs through FEX and nothing reads it.
+        if settings.advertiseAVX, engine.manifest.requiresRosetta { env["ROSETTA_ADVERTISE_AVX"] = "1" }
         // OpenGL games that ask for a 3.2+ core context without the forward-compatible bit get NULL
         // from Wine's Mac driver ("OS X only supports forward-compatible 3.2+ contexts") and crash
         // on the first GL call. macOS makes every 3.2+ core context forward-compatible anyway, so the
@@ -817,13 +818,13 @@ public struct Bottle: Sendable {
         guard let dir = engine.rendererDir(selected.rawValue) else { return false }
         switch selected {
         case .dxmt:
-            return FileManager.default.fileExists(atPath: dir.appending(path: "wine/x86_64-windows/nvngx.dll").path)
+            return FileManager.default.fileExists(atPath: dir.appending(path: "wine/\(engine.manifest.pe64LibDir)/nvngx.dll").path)
         case .d3dmetal:
             let windows = ["nvngx.dll", "nvngx-on-metalfx.dll"].contains {
-                FileManager.default.fileExists(atPath: dir.appending(path: "wine/x86_64-windows/\($0)").path)
+                FileManager.default.fileExists(atPath: dir.appending(path: "wine/\(engine.manifest.pe64LibDir)/\($0)").path)
             }
             let unix = ["nvngx.so", "nvngx-on-metalfx.so"].contains {
-                FileManager.default.fileExists(atPath: dir.appending(path: "wine/x86_64-unix/\($0)").path)
+                FileManager.default.fileExists(atPath: dir.appending(path: "wine/\(engine.manifest.unixLibDir)/\($0)").path)
             }
             return windows && unix
         default:
@@ -834,10 +835,11 @@ public struct Bottle: Sendable {
     private func needsDLSSBridgeAliases(engine: InstalledEngine) -> Bool {
         guard let dir = engine.rendererDir("d3dmetal") else { return false }
         let wine = dir.appending(path: "wine")
-        let needsWindowsAlias = !FileManager.default.fileExists(atPath: wine.appending(path: "x86_64-windows/nvngx.dll").path)
-            && FileManager.default.fileExists(atPath: wine.appending(path: "x86_64-windows/nvngx-on-metalfx.dll").path)
-        let needsUnixAlias = !FileManager.default.fileExists(atPath: wine.appending(path: "x86_64-unix/nvngx.so").path)
-            && FileManager.default.fileExists(atPath: wine.appending(path: "x86_64-unix/nvngx-on-metalfx.so").path)
+        let pe = engine.manifest.pe64LibDir, unix = engine.manifest.unixLibDir
+        let needsWindowsAlias = !FileManager.default.fileExists(atPath: wine.appending(path: "\(pe)/nvngx.dll").path)
+            && FileManager.default.fileExists(atPath: wine.appending(path: "\(pe)/nvngx-on-metalfx.dll").path)
+        let needsUnixAlias = !FileManager.default.fileExists(atPath: wine.appending(path: "\(unix)/nvngx.so").path)
+            && FileManager.default.fileExists(atPath: wine.appending(path: "\(unix)/nvngx-on-metalfx.so").path)
         return needsWindowsAlias || needsUnixAlias
     }
 
@@ -945,9 +947,10 @@ public struct Bottle: Sendable {
         guard settings.dlssEnabled, renderer == .d3dmetal,
               supportsDLSS(engine: engine, renderer: renderer),
               let dir = engine.rendererDir("d3dmetal") else { return }
+        let pe = engine.manifest.pe64LibDir, unix = engine.manifest.unixLibDir
         let sources = [
-            (dir.appending(path: "wine/x86_64-windows/nvngx.dll"), dir.appending(path: "wine/x86_64-windows/nvngx-on-metalfx.dll"), "x86_64-windows/nvngx.dll"),
-            (dir.appending(path: "wine/x86_64-unix/nvngx.so"), dir.appending(path: "wine/x86_64-unix/nvngx-on-metalfx.so"), "x86_64-unix/nvngx.so"),
+            (dir.appending(path: "wine/\(pe)/nvngx.dll"), dir.appending(path: "wine/\(pe)/nvngx-on-metalfx.dll"), "\(pe)/nvngx.dll"),
+            (dir.appending(path: "wine/\(unix)/nvngx.so"), dir.appending(path: "wine/\(unix)/nvngx-on-metalfx.so"), "\(unix)/nvngx.so"),
         ]
         let fm = FileManager.default
         let wineDir = url.appending(path: ".highball-dlss/wine", directoryHint: .isDirectory)

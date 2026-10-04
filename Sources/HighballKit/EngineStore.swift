@@ -48,6 +48,7 @@ public struct EngineStore: Sendable {
             let manifest = dir.appending(path: "manifest.json")
             guard let m = try? EngineManifest.load(from: manifest) else { return nil }
             try? linkRuntime(dir)   // heals broken runtime links from pre-0.7.9 installs
+            try? linkSignedLoader(dir, manifest: m)   // an app that moved repoints its arm64 engines
             return InstalledEngine(manifest: m, root: dir)
         }.sorted { $0.manifest.id < $1.manifest.id }
     }
@@ -184,6 +185,7 @@ public struct EngineStore: Sendable {
         let root = paths.engine(id)
         let m = try EngineManifest.load(from: root.appending(path: "manifest.json"))
         try? linkRuntime(root)      // heals broken runtime links from pre-0.7.9 installs
+        try? linkSignedLoader(root, manifest: m)
         return InstalledEngine(manifest: m, root: root)
     }
 
@@ -217,6 +219,11 @@ public struct EngineStore: Sendable {
         progress: DownloadProgress? = nil
     ) async throws -> InstalledEngine {
         try paths.ensure()
+        // An arm64 engine runs through the signed loader in Highball.app and nothing else, so
+        // without it the download would only end in an engine that cannot start (WineLoaderHelper).
+        if manifest.isNativeARM64, WineLoaderHelper.locate() == nil {
+            throw HighballError.failed("The \(manifest.displayName) engine runs through Highball's signed Wine loader, which comes with Highball.app. Install Highball in Applications (or point \(WineLoaderHelper.environmentKey) at its WineLoader.app) and try again.")
+        }
         let root = paths.engine(manifest.id)
         let staging = paths.engines.appending(path: ".\(manifest.id).partial", directoryHint: .isDirectory)
         try? FileManager.default.removeItem(at: staging)
@@ -244,6 +251,7 @@ public struct EngineStore: Sendable {
         saved.acceptedLicenses = Self.acceptances(requested: accepted, installed: (try? installedEngines()) ?? [])
         try saved.save(to: staging.appending(path: "manifest.json"))
         try linkRuntime(staging)
+        try linkSignedLoader(staging, manifest: saved)
         // The unpacked tree must be a whole engine before it replaces anything: an archive that
         // unpacked short (a full disk, a file the archive lacks) used to install all the same and
         // fail every launch afterwards (highball#118). The archive was checksummed, so the fault
@@ -471,6 +479,32 @@ public struct EngineStore: Sendable {
         link("GStreamer.framework", to: "../../frameworks/GStreamer.framework")
     }
 
+    /// Points an arm64 engine's `wine` at Highball's signed loader (WineLoaderHelper). Wine's ntdll
+    /// starts every child process through `<directory of ntdll.so>/wine`, so that file becomes a
+    /// symlink to the helper and `bin/wine` a relative link to it, the way Wine installs its own;
+    /// the engine's loader, built unsigned by CI, is set aside once as `wine.unsigned`. Redone on
+    /// every read of the engine, like linkRuntime, so an app that moved, or was updated (the helper
+    /// is the app's), heals its engines on the next launch. Nothing happens for an Intel engine, or
+    /// when no helper is on this Mac (the CLI without the app; `missingFiles` then says so).
+    func linkSignedLoader(_ root: URL, manifest: EngineManifest, helper: URL? = WineLoaderHelper.locate()) throws {
+        guard manifest.isNativeARM64, let helper else { return }
+        let fm = FileManager.default
+        let unixDir = root.appending(path: "engine/lib/wine/\(manifest.unixLibDir)", directoryHint: .isDirectory)
+        for (link, target) in [(unixDir.appending(path: "wine"), helper.path),
+                               (root.appending(path: "engine/bin/wine"), "../lib/wine/\(manifest.unixLibDir)/wine")] {
+            if let existing = try? fm.destinationOfSymbolicLink(atPath: link.path) {
+                if existing == target { continue }
+                try fm.removeItem(at: link)               // a stale link, dangling or to an old app location
+            } else if fm.fileExists(atPath: link.path) {
+                let aside = link.appendingPathExtension("unsigned")
+                try? fm.removeItem(at: aside)
+                try fm.moveItem(at: link, to: aside)      // the engine's own loader: kept, never used
+            }
+            try fm.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.createSymbolicLink(atPath: link.path, withDestinationPath: target)
+        }
+    }
+
     func stripQuarantine(_ url: URL) throws {
         try? Shell.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", url.path])
     }
@@ -515,16 +549,37 @@ public struct InstalledEngine: Sendable {
     /// halves and the Unix side of ntdll. An engine missing any of them fails every launch
     /// with "could not load kernel32.dll" (highball#118, an unpack that stopped early), so an
     /// install refuses to finish without them and the app reinstalls its own when they are gone.
-    public static let requiredFiles = [
-        "engine/bin/wine", "engine/bin/wineserver",
-        "engine/lib/wine/x86_64-windows/kernel32.dll", "engine/lib/wine/x86_64-windows/ntdll.dll",
-        "engine/lib/wine/i386-windows/kernel32.dll", "engine/lib/wine/x86_64-unix/ntdll.so",
-    ]
+    public static let requiredFiles = requiredFiles(for: EngineManifest(id: "", displayName: "", arch: "x86_64", minMacOS: "", components: [:]))
+    /// The same list for an engine of either architecture. An arm64 engine also needs FEX, in the
+    /// two DLLs Wine loads under its emulator names and the Unix helper each of them loads by name:
+    /// without them it runs ARM64 Windows programs only, which no game is.
+    public static func requiredFiles(for manifest: EngineManifest) -> [String] {
+        var files = ["engine/bin/wine", "engine/bin/wineserver",
+                     "engine/lib/wine/\(manifest.pe64LibDir)/kernel32.dll", "engine/lib/wine/\(manifest.pe64LibDir)/ntdll.dll",
+                     "engine/lib/wine/\(EngineManifest.pe32LibDir)/kernel32.dll", "engine/lib/wine/\(manifest.unixLibDir)/ntdll.so"]
+        if manifest.isNativeARM64 {
+            files += ["engine/lib/wine/\(manifest.pe64LibDir)/xtajit64.dll", "engine/lib/wine/\(manifest.pe64LibDir)/xtajit.dll",
+                      "engine/lib/wine/\(manifest.unixLibDir)/libarm64ecfex.so", "engine/lib/wine/\(manifest.unixLibDir)/libwow64fex.so"]
+        }
+        return files
+    }
+    /// How the loader shows up in `missingFiles` when an arm64 engine's `wine` is not Highball's
+    /// signed helper: its own loader is there, so the file check alone would pass.
+    public static let signedLoaderName = "engine/bin/wine (Highball's signed Wine loader)"
     /// Which of `requiredFiles` are absent, relative to the engine's root.
     public var missingFiles: [String] {
-        Self.requiredFiles.filter { !FileManager.default.fileExists(atPath: root.appending(path: $0).path) }
+        var missing = Self.requiredFiles(for: manifest).filter { !FileManager.default.fileExists(atPath: root.appending(path: $0).path) }
+        if manifest.isNativeARM64, !usesSignedLoader { missing.append(Self.signedLoaderName) }
+        return missing
     }
     public var isComplete: Bool { missingFiles.isEmpty }
+    /// Whether this engine's Unix-side `wine`, the path Wine's ntdll starts child processes
+    /// through, is a link to Highball's signed loader (EngineStore.linkSignedLoader).
+    public var usesSignedLoader: Bool {
+        let link = engineDir.appending(path: "lib/wine/\(manifest.unixLibDir)/wine")
+        guard let dest = try? FileManager.default.destinationOfSymbolicLink(atPath: link.path) else { return false }
+        return WineLoaderHelper.isHelperPath(dest) && FileManager.default.isExecutableFile(atPath: dest)
+    }
 
     /// resolves the shim directory and repairs the real-driver link; it touches the disk, so the app caches it per engine
     public func resolveLsfgShimDir() -> URL? {
@@ -589,10 +644,10 @@ public struct InstalledEngine: Sendable {
     public func timestampShimDir(d3dmetal: URL) -> URL? {
         guard let shim = rendererDir("d3dmetal-tsshim") else { return nil }
         let fm = FileManager.default
-        let realPE = d3dmetal.appending(path: "wine/x86_64-windows/d3d12.dll")
-        let realSO = d3dmetal.appending(path: "wine/x86_64-unix/d3d12.so")
-        let pe = shim.appending(path: "wine/x86_64-windows/\(Self.shimRealName).dll")
-        let so = shim.appending(path: "wine/x86_64-unix/\(Self.shimRealName).so")
+        let realPE = d3dmetal.appending(path: "wine/\(manifest.pe64LibDir)/d3d12.dll")
+        let realSO = d3dmetal.appending(path: "wine/\(manifest.unixLibDir)/d3d12.so")
+        let pe = shim.appending(path: "wine/\(manifest.pe64LibDir)/\(Self.shimRealName).dll")
+        let so = shim.appending(path: "wine/\(manifest.unixLibDir)/\(Self.shimRealName).so")
         do {
             let realAttrs = try fm.attributesOfItem(atPath: realPE.path)
             let current = (try? fm.attributesOfItem(atPath: pe.path))
@@ -610,7 +665,7 @@ public struct InstalledEngine: Sendable {
                 try fm.createSymbolicLink(at: so, withDestinationURL: realSO)
             }
             // The 0.9.0 layout (a hard link under this name) is the one that collided.
-            for stale in ["wine/x86_64-windows/d3d12_d3dmetal.dll", "wine/x86_64-unix/d3d12_d3dmetal.so"] {
+            for stale in ["wine/\(manifest.pe64LibDir)/d3d12_d3dmetal.dll", "wine/\(manifest.unixLibDir)/d3d12_d3dmetal.so"] {
                 try? fm.removeItem(at: shim.appending(path: stale))
             }
             return shim

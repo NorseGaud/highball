@@ -83,8 +83,16 @@ final class AppState {
 
     // Onboarding
     var rosettaInstalled = true
-    /// Rosetta stopped working on a Mac that already has an engine: the app asks to install it.
+    /// Rosetta stopped working on a Mac that already has an engine that needs it: the app asks to install it.
     var rosettaMissing = false
+    /// Get started will install Rosetta first: the Mac lacks it and the bundled engine needs it.
+    var setupInstallsRosetta = false
+    /// Whether the engine Get started installs is Intel code. Every engine shipped so far is; the
+    /// arm64 line (private/notes/rosetta-transition-plan.md) says `requires: []` and skips Rosetta.
+    static var bundledEngineRequiresRosetta: Bool {
+        guard let url = bundledManifest, let m = try? EngineManifest.load(from: url) else { return true }
+        return m.requiresRosetta
+    }
 
     /// Installs Rosetta for an existing install, from the ask that rosettaMissing raises.
     func installRosettaNow() {
@@ -786,8 +794,10 @@ final class AppState {
         needsOnboarding = engines.isEmpty && homeUnavailable == nil   // an unplugged drive is not a first run
         rosettaInstalled = Self.rosettaWorks()
         // An existing install can lose Rosetta (two Macs did after the macOS 27 update, #101 and
-        // #106) and onboarding is the only place that used to install it. Offer it here instead.
-        rosettaMissing = !rosettaInstalled && !engines.isEmpty
+        // #106) and onboarding is the only place that used to install it. Offer it here instead,
+        // and only while an engine that needs it is installed: the arm64 line never does.
+        rosettaMissing = !rosettaInstalled && engines.contains { $0.manifest.requiresRosetta }
+        setupInstallsRosetta = !rosettaInstalled && Self.bundledEngineRequiresRosetta
         // Drop a selection whose bottle is gone, not merely a nil one: a delete that threw after
         // the bottle had in fact been removed (the losing side of a race) left the selection
         // pinned to a name nothing could resolve.
@@ -1097,13 +1107,13 @@ final class AppState {
                 done: DoneState(title: L("Highball is ready"), ctaTitle: nil, cta: nil),
                 stop: .cancelTask(label: L("Stop"))) { [self] in
             funnel(.installStarted)
-            if !rosettaInstalled {
+            let manifest = try EngineManifest.load(from: manifestURL)
+            if manifest.requiresRosetta, !rosettaInstalled {
                 await MainActor.run { self.stage = L("Installing Rosetta, Apple's compatibility layer") }
                 try await Self.installRosetta()
                 await MainActor.run { self.rosettaInstalled = true; self.appendLog("Rosetta installed") }
             }
             if engines.isEmpty {
-                let manifest = try EngineManifest.load(from: manifestURL)
                 _ = try await engineStore.install(manifest, accepted: []) { name, received, total in
                     Task { @MainActor in self.reportDownload(name, received: received, total: total) }
                 }

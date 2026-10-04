@@ -172,7 +172,13 @@ public struct WineRunner: Sendable {
             // EBADARCH: macOS will not run Intel code, so Rosetta is missing or broken. Say that,
             // not "Bad CPU type in executable" (issue #101).
             if (error as NSError).code == 86 || error.localizedDescription.contains("Bad CPU type") {
-                throw HighballError.failed("Rosetta, Apple's layer for Intel programs, is not working on this Mac, and Highball's Wine engine needs it. In Terminal run: softwareupdate --install-rosetta --agree-to-license, then try again.")
+                // Only an Intel engine can mean that. An arm64 engine's loader is a link to the
+                // signed helper in Highball.app (WineLoaderHelper), and this error there means the
+                // link points at something that is not a Mac program any more.
+                if engine.manifest.requiresRosetta {
+                    throw HighballError.failed("Rosetta, Apple's layer for Intel programs, is not working on this Mac, and Highball's Wine engine needs it. In Terminal run: softwareupdate --install-rosetta --agree-to-license, then try again.")
+                }
+                throw HighballError.failed("macOS refused to start the Wine loader of engine \(engine.id) (\(engine.wineBinary.path)). Quit and reopen Highball, which repairs the link to its loader, then try again.")
             }
             throw error
         }
@@ -245,7 +251,8 @@ public struct WineRunner: Sendable {
         // again. Say so here, once, rather than leaving each caller to offer "try again with a
         // fresh copy" for a download that was never the problem (highball#151, #153).
         let gone = EngineIntegrity.gone(fromEngineAt: engine.root,
-                                        notFound: EngineIntegrity.librariesNotFound(in: importFailures.lines.joined(separator: "\n")))
+                                        notFound: EngineIntegrity.librariesNotFound(in: importFailures.lines.joined(separator: "\n")),
+                                        arch: engine.manifest.arch)
         if status != 0, !gone.isEmpty {
             throw HighballError.engineDamaged(engine: engine.id, files: gone)
         }
@@ -349,8 +356,8 @@ public struct WineRunner: Sendable {
     /// The bottle's two `mscoree.dll` copies and the engine builtin each would be on a Wine-made
     /// prefix, as (bottle file, engine file) pairs.
     static func mscoreePairs(engine: InstalledEngine, bottle: Bottle) -> [(URL, URL)] {
-        [("windows/system32/mscoree.dll", "lib/wine/x86_64-windows/mscoree.dll"),
-         ("windows/syswow64/mscoree.dll", "lib/wine/i386-windows/mscoree.dll")].map {
+        [("windows/system32/mscoree.dll", "lib/wine/\(engine.manifest.pe64LibDir)/mscoree.dll"),
+         ("windows/syswow64/mscoree.dll", "lib/wine/\(EngineManifest.pe32LibDir)/mscoree.dll")].map {
             (bottle.driveC.appending(path: $0.0), engine.engineDir.appending(path: $0.1))
         }
     }

@@ -42,6 +42,52 @@ cp ".build/$CONFIG/HighballApp" "$APP/Contents/MacOS/Highball"
 SPARKLE_FW=$(ls -d .build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-*/Sparkle.framework | head -1)
 cp -R "$SPARKLE_FW" "$APP/Contents/Frameworks/"
 
+# Highball's signed Wine loader for the arm64 engines (WineLoaderHelper.swift, private/notes/
+# rosetta-transition-plan.md): a helper bundle, app.highball.WineLoader, whose one binary is built
+# from spike/wineloader. Apple's cross-architecture entitlement is restricted, so the bundle carries
+# the Developer ID provisioning profile from private/signing (gitignored; the account holder made it
+# in the developer portal on 2026-10-04, it expires 2044-09-29) and is signed with the entitlements
+# below. An arm64 engine points its `wine` at this binary; nothing is ever copied into the bundle.
+spike/wineloader/build.sh >/dev/null
+HELPER="$APP/Contents/Helpers/WineLoader.app"
+mkdir -p "$HELPER/Contents/MacOS"
+cp .build/wineloader/wine "$HELPER/Contents/MacOS/wine"
+cat > "$HELPER/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>app.highball.WineLoader</string>
+  <key>CFBundleExecutable</key><string>wine</string>
+  <key>CFBundleName</key><string>Highball Wine Loader</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>LSBackgroundOnly</key><true/>
+  <key>LSMinimumSystemVersion</key><string>26.5</string>
+</dict></plist>
+PLIST
+LOADER_PROFILE=private/signing/Highball_Wine_Loader_Developer_ID.provisionprofile
+if [ -f "$LOADER_PROFILE" ]; then
+  cp "$LOADER_PROFILE" "$HELPER/Contents/embedded.provisionprofile"
+elif [ "$CONFIG" = release ]; then
+  echo "error: release build without $LOADER_PROFILE: the Wine loader would ship without the cross-architecture entitlement and no arm64 engine could start" >&2; exit 1
+else
+  echo "note: no $LOADER_PROFILE, the Wine loader helper is signed without its entitlements (debug build)"
+fi
+cat > dist/wineloader.entitlements <<'ENTITLEMENTS'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.developer.cross-architecture-support</key><true/>
+  <key>com.apple.application-identifier</key><string>B95M7DARU4.app.highball.WineLoader</string>
+  <key>com.apple.developer.team-identifier</key><string>B95M7DARU4</string>
+  <key>com.apple.security.cs.allow-jit</key><true/>
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key><true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+</dict></plist>
+ENTITLEMENTS
+
 # Resources: engine manifest, GPTK license, recipes and DB entries (from highball-db).
 cp spike/engine-manifest.json "$APP/Contents/Resources/engine-manifest.json"
 # Other engines the app can offer (previous ones for rollback, candidates for Advanced).
@@ -156,6 +202,13 @@ if [ -n "$IDENTITY" ]; then
   for tool in "$APP"/Contents/Resources/tools/*; do
     case "$tool" in *.LICENSE) ;; *) codesign --force --options runtime --timestamp -s "$IDENTITY" "$tool" ;; esac
   done
+  # The Wine loader helper: its restricted entitlement is only honoured next to the profile, and a
+  # binary claiming it without one is killed at exec, so without the profile it is signed plain.
+  if [ -f "$HELPER/Contents/embedded.provisionprofile" ]; then
+    codesign --force --options runtime --timestamp --entitlements dist/wineloader.entitlements -s "$IDENTITY" "$HELPER"
+  else
+    codesign --force --options runtime --timestamp -s "$IDENTITY" "$HELPER"
+  fi
   codesign --force --options runtime --timestamp --entitlements dist/entitlements.plist -s "$IDENTITY" "$APP"
 else
   codesign --force --deep -s - "$APP"

@@ -467,7 +467,10 @@ struct BottleSettingsSheet: View {
                     Picker(L("Windows version"), selection: binding(\.windowsVersion)) {
                         ForEach(WindowsVersion.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
-                    Toggle(L("Advertise AVX to games (Rosetta)"), isOn: binding(\.advertiseAVX))
+                    // Rosetta's switch; an arm64 engine runs x86 code through FEX and has none.
+                    if engine?.manifest.requiresRosetta ?? true {
+                        Toggle(L("Advertise AVX to games (Rosetta)"), isOn: binding(\.advertiseAVX))
+                    }
                     Toggle(L("Use ⌘C / ⌘V inside Windows apps"), isOn: binding(\.commandIsControl))
                     Text(L("Maps the Command keys to Ctrl, so Mac copy and paste work in Steam and games. Option becomes Alt so Alt-based bindings keep working. Off = Wine's default, where Command acts as Alt."))
                         .font(.caption).foregroundStyle(.secondary)
@@ -608,9 +611,9 @@ struct OnboardingView: View {
                 .buttonStyle(.borderedProminent).controlSize(.large).tint(HB.amber)
                 .disabled(state.busy)
                 .padding(.top, 6)
-                Text(state.rosettaInstalled
-                     ? L("Nothing to choose. The download takes a few minutes on most connections.")
-                     : L("Nothing to choose. Highball installs Rosetta for you, then the download takes a few minutes."))
+                Text(state.setupInstallsRosetta
+                     ? L("Nothing to choose. Highball installs Rosetta for you, then the download takes a few minutes.")
+                     : L("Nothing to choose. The download takes a few minutes on most connections."))
                     .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 440)
                 Spacer().frame(height: 30)
                 Text(L("Highball downloads a Wine engine from public upstream releases. Nothing is hosted by us."))
