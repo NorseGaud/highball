@@ -354,6 +354,26 @@ public struct RecipeRunner: Sendable {
         return after.filter { !before.contains($0) && !isPlumbing($0) }
     }
 
+    /// The variables a winetricks step adds on top of the environment's own. WINE_BIN,
+    /// WINESERVER_BIN and WINE_BINDIR are winetricks' overrides for setups where its binary
+    /// detection fails; without them dotnet48 and friends abort on this engine (2026-08-25,
+    /// highball#16). HB_AUDIOBUF=0 keeps the audio buffer library out: winetricks runs under
+    /// /bin/bash and Apple's own tools, which are arm64e and cannot load a library built for
+    /// x86_64 and arm64, and where DYLD variables reach them (SIP off, the hosted CI runner)
+    /// dyld ends the process on the spot, which failed every dotnet48 install on the nightly
+    /// (highball#248). A Mac with SIP on drops the variable before bash sees it, which is why
+    /// the app never showed it. No installer needs the audio cap.
+    public static func winetricksExtras(engine: InstalledEngine) -> [String: String] {
+        [
+            "WINE": engine.wineBinary.path,
+            "WINESERVER": engine.wineserverBinary.path,
+            "WINE_BIN": engine.wineBinary.path,
+            "WINESERVER_BIN": engine.wineserverBinary.path,
+            "WINE_BINDIR": engine.wineBinary.deletingLastPathComponent().path,
+            "HB_AUDIOBUF": "0",
+        ]
+    }
+
     /// How long an installer's helpers get to finish on their own before they count as
     /// leftovers. A bootstrapper's parent exits while its engine keeps installing: the VC++
     /// redistributable returned 0 after 8 s with its Burn engine still writing the x64 runtime,
@@ -480,13 +500,7 @@ public struct RecipeRunner: Sendable {
                 // its binary detection fails; without them dotnet48 and friends abort on this engine
                 // (verified 2026-08-25, issue #16). bash rather than sh for the same reason winetricks
                 // documents on macOS.
-                var env = try bottle.environment(engine: engine, renderer: .wined3d, extra: [
-                    "WINE": engine.wineBinary.path,
-                    "WINESERVER": engine.wineserverBinary.path,
-                    "WINE_BIN": engine.wineBinary.path,
-                    "WINESERVER_BIN": engine.wineserverBinary.path,
-                    "WINE_BINDIR": engine.wineBinary.deletingLastPathComponent().path,
-                ])
+                var env = try bottle.environment(engine: engine, renderer: .wined3d, extra: Self.winetricksExtras(engine: engine))
                 // winetricks shells out to cabextract for Microsoft's cabinet installers (the core
                 // fonts among them) and macOS does not ship it, so the app bundles one under
                 // Resources/tools (highball#96). HIGHBALL_TOOLS names another directory, for the CLI.

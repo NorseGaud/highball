@@ -269,6 +269,20 @@ final class EnvironmentTests: XCTestCase {
         XCTAssertEqual(try bottle.environment(engine: engine)["DYLD_INSERT_LIBRARIES"], "/x/own.dylib", "HB_AUDIOBUF=0 leaves ours out")
     }
 
+    /// highball#248: a winetricks step runs under /bin/bash and Apple's arm64e tools, which
+    /// cannot load the audio buffer library, so the variables it adds keep the library out even
+    /// on an engine that ships it.
+    func testAWinetricksStepNeverInsertsTheAudioBufferLibrary() throws {
+        let engine = try d3dmetalEngine()
+        defer { try? FileManager.default.removeItem(at: engine.root) }
+        try Data().write(to: engine.frameworksDir.appending(path: "libhbaudiobuf.dylib"))
+        let bottle = Bottle(url: URL(fileURLWithPath: "/tmp/hb-test-bottle"), settings: BottleSettings(name: "t", engineID: engine.id))
+        XCTAssertNotNil(try bottle.environment(engine: engine)["DYLD_INSERT_LIBRARIES"], "a game launch on this engine gets the library")
+        let env = try bottle.environment(engine: engine, renderer: .wined3d, extra: RecipeRunner.winetricksExtras(engine: engine))
+        XCTAssertNil(env["DYLD_INSERT_LIBRARIES"])
+        XCTAssertEqual(env["WINE_BINDIR"], engine.wineBinary.deletingLastPathComponent().path, "winetricks' own overrides stay")
+    }
+
     // d3dmetal ships 64-bit only, so 32-bit direct3d 10/11 goes to dxmt after it, not to wined3d
     func testD3DMetalFallsBackToDXMTFor32BitGames() throws {
         let engine = try d3dmetalEngine()
