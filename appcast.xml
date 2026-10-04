@@ -5,6 +5,14 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.10.6</title>
+      <description><![CDATA[The default engine keeps data execution prevention on (r21), the library opens on an Installed games row with Play on each cover, games in a second Steam library folder show up, and the database gains a Bloody Spell recipe]]></description>
+      <pubDate>Mon, 05 Oct 2026 00:52:55 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.6/Highball-0.10.6.zip" sparkle:version="0.10.6" sparkle:shortVersionString="0.10.6" sparkle:edSignature="IAU8z/Jk+XuOj8q+zg1svyDSp1hJ+I0wsE9vfcV8SnbXDDMUbWo1EK5IDdv0S/4We+Rl5UP2gWw8+hJWSLyuCw==" length="4330523" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.10.5</title>
       <description><![CDATA[The Wine 11 engine keeps DEP on (r17, far faster Direct3D 9 through DXVK), a Steam left broken by an interrupted update offers its installer again, games can be renamed, Rockstar recipes offer the current engine, nine new games]]></description>
       <pubDate>Sun, 04 Oct 2026 23:55:20 +0200</pubDate>
