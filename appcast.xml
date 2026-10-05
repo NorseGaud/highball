@@ -5,6 +5,14 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.10.7</title>
+      <description><![CDATA[A symlinked Steam library lists its games, the database in the app is current again, covers and names survive an environment rename, the engine question warns that a move carries every game, Bloody Spell and Overwatch 2 recipes, seven new games]]></description>
+      <pubDate>Mon, 05 Oct 2026 11:38:14 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.7/Highball-0.10.7.zip" sparkle:version="0.10.7" sparkle:shortVersionString="0.10.7" sparkle:edSignature="r1YEokIVfwm02ycUO5domA92GkYqw6OARmNpdGS+1YuGS6+SCSzTbChYcIP2z0eglORtry1g2aB2dOeBVJrwDg==" length="4387965" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.10.6</title>
       <description><![CDATA[The default engine keeps data execution prevention on (r21), the library opens on an Installed games row with Play on each cover, and games in a second Steam library folder show up]]></description>
       <pubDate>Mon, 05 Oct 2026 00:52:55 +0200</pubDate>
