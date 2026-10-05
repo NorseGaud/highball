@@ -112,9 +112,22 @@ else
 fi
 RECIPES="../highball-db/recipes"
 if [ ! -d "$RECIPES" ]; then
+  # Without a sibling checkout the build keeps its own clone in .build, and that clone must be the
+  # database as published now: 0.10.6 shipped from a clone left at an earlier build's commit and
+  # lacked the night's rows and the Bloody Spell recipe its notes announced (2026-10-05). The cache
+  # is ours and never edited, so it is reset to origin's main on every build; a release build
+  # refuses to go on when that fails.
   RECIPES=".build/highball-db/recipes"
-  [ -d "$RECIPES" ] || git clone --depth 1 https://github.com/gauthierpiarrette/highball-db.git .build/highball-db
+  if [ -d .build/highball-db/.git ]; then
+    if ! { git -C .build/highball-db fetch -q --depth 1 origin main && git -C .build/highball-db reset -q --hard FETCH_HEAD; }; then
+      if [ "$CONFIG" = release ]; then echo "error: could not update .build/highball-db to origin/main; a release must bundle the current database" >&2; exit 1; fi
+      echo "note: .build/highball-db could not be updated, bundling it as it is"
+    fi
+  else
+    git clone -q --depth 1 https://github.com/gauthierpiarrette/highball-db.git .build/highball-db
+  fi
 fi
+echo "database: $(git -C "$(dirname "$RECIPES")" log -1 --format='%h %cs %s' 2>/dev/null | cut -c1-80)"
 for f in "$RECIPES"/launchers/*.json "$RECIPES"/games/*.json "$RECIPES"/tweaks/*.json; do cp "$f" "$APP/Contents/Resources/"; done
 DBDIR="$(dirname "$RECIPES")/db/games"
 if [ -d "$DBDIR" ]; then mkdir -p "$APP/Contents/Resources/db-games"; cp "$DBDIR"/*.json "$APP/Contents/Resources/db-games/"; fi
