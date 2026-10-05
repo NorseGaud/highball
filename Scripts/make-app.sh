@@ -48,8 +48,21 @@ cp -R "$SPARKLE_FW" "$APP/Contents/Frameworks/"
 # the Developer ID provisioning profile from private/signing (gitignored; the account holder made it
 # in the developer portal on 2026-10-04, it expires 2044-09-29) and is signed with the entitlements
 # below. An arm64 engine points its `wine` at this binary; nothing is ever copied into the bundle.
-spike/wineloader/build.sh >/dev/null
+# The loader links with -x86_64_layout_emulation, which only Xcode 26.4's linker knows. A release
+# needs it; a debug build on an older Xcode (CI's macos-15 runners, a contributor's Mac) goes on
+# without the helper, which only an arm64 engine would use and none ships yet (PR gate failure on
+# highball#260, 2026-10-05: "ld: unknown options: -x86_64_layout_emulation").
 HELPER="$APP/Contents/Helpers/WineLoader.app"
+HAVE_LOADER=1
+if ! spike/wineloader/build.sh >/dev/null 2>dist/wineloader-build.err; then
+  if [ "$CONFIG" = release ]; then
+    cat dist/wineloader-build.err >&2
+    echo "error: the Wine loader helper did not build; a release needs Xcode 26.4 or later" >&2; exit 1
+  fi
+  echo "note: the Wine loader helper did not build ($(grep -m1 -i 'error\|unknown' dist/wineloader-build.err || echo 'see dist/wineloader-build.err')), so this debug build has none; it needs Xcode 26.4 or later"
+  HAVE_LOADER=
+fi
+if [ -n "$HAVE_LOADER" ]; then
 mkdir -p "$HELPER/Contents/MacOS"
 cp .build/wineloader/wine "$HELPER/Contents/MacOS/wine"
 cat > "$HELPER/Contents/Info.plist" <<PLIST
@@ -74,6 +87,7 @@ elif [ "$CONFIG" = release ]; then
 else
   echo "note: no $LOADER_PROFILE, the Wine loader helper is signed without its entitlements (debug build)"
 fi
+fi   # HAVE_LOADER
 cat > dist/wineloader.entitlements <<'ENTITLEMENTS'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -217,7 +231,9 @@ if [ -n "$IDENTITY" ]; then
   done
   # The Wine loader helper: its restricted entitlement is only honoured next to the profile, and a
   # binary claiming it without one is killed at exec, so without the profile it is signed plain.
-  if [ -f "$HELPER/Contents/embedded.provisionprofile" ]; then
+  if [ ! -d "$HELPER" ]; then
+    :   # a debug build on an Xcode too old to link the helper has none to sign
+  elif [ -f "$HELPER/Contents/embedded.provisionprofile" ]; then
     codesign --force --options runtime --timestamp --entitlements dist/wineloader.entitlements -s "$IDENTITY" "$HELPER"
   else
     codesign --force --options runtime --timestamp -s "$IDENTITY" "$HELPER"
