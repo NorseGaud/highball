@@ -54,14 +54,19 @@ struct SettingsView: View {
     }
 }
 
+struct EnvironmentSettingsDestination: Hashable {
+    let name: String
+}
+
+private struct EnvironmentProgramsDestination: Hashable {
+    let name: String
+}
+
 /// One environment by default, more only when two games need settings that conflict.
 struct EnvironmentsPane: View {
     @Environment(AppState.self) private var state
     @State private var selectedName: String?
-    @State private var openName: String?
-    /// The environment whose settings sheet is open from here: engine, overrides, variables and
-    /// dependencies were five clicks away behind the full page (2026-09-11 walkthrough).
-    @State private var settingsName: String?
+    @State private var navigationPath = NavigationPath()
     @State private var pendingDelete: String?
     @State private var showCreate = false
 
@@ -70,74 +75,72 @@ struct EnvironmentsPane: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(L("Highball keeps your games in one Windows environment and looks after it. A second one is only for a game whose settings conflict with the others."))
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            ScrollView {
-                VStack(spacing: 8) {
-                    ForEach(state.bottles, id: \.name) { bottle in
-                        environmentCard(bottle)
-                    }
-                    ForEach(state.damagedBottles) { damaged in
-                        HStack(spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(damaged.name).font(.headline)
-                                Text(damaged.reason).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button(L("Delete…"), role: .destructive) { pendingDelete = damaged.name }.controlSize(.small)
+        NavigationStack(path: $navigationPath) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(L("Highball keeps your games in one Windows environment and looks after it. A second one is only for a game whose settings conflict with the others."))
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                ScrollView {
+                    VStack(spacing: 8) {
+                        ForEach(state.bottles, id: \.name) { bottle in
+                            environmentCard(bottle)
                         }
-                        .padding(12)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(HB.card))
+                        ForEach(state.damagedBottles) { damaged in
+                            HStack(spacing: 12) {
+                                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(damaged.name).font(.headline)
+                                    Text(damaged.reason).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button(L("Delete…"), role: .destructive) { pendingDelete = damaged.name }.controlSize(.small)
+                            }
+                            .padding(12)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(HB.card))
+                        }
                     }
                 }
-            }
-            .frame(maxHeight: 170)
-            if let bottle = selected { details(bottle) }
-            Spacer(minLength: 0)
-            HStack(spacing: 10) {
-                Button(L("New environment…")) { showCreate = true }.disabled(state.busy)
-                Spacer()
-                // Where it all lives (#24, #68): games are big and internal disks are small.
-                Text(String(format: L("Kept in %@"), state.paths.home.path)).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                    .help(state.paths.home.path)
-                Button(L("Change…")) { state.chooseHome() }.controlSize(.small).disabled(state.busy)
-                if HighballPaths.configuredHome() != nil {
-                    Button(L("Default")) { state.useDefaultHome() }.controlSize(.small).disabled(state.busy)
-                        .help(L("Back to ~/Library/Application Support/Highball, with the data"))
+                .frame(maxHeight: 170)
+                if let bottle = selected { details(bottle) }
+                Spacer(minLength: 0)
+                HStack(spacing: 10) {
+                    Button(L("New environment…")) { showCreate = true }.disabled(state.busy)
+                    Spacer()
+                    // Where it all lives (#24, #68): games are big and internal disks are small.
+                    Text(String(format: L("Kept in %@"), state.paths.home.path)).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        .help(state.paths.home.path)
+                    Button(L("Change…")) { state.chooseHome() }.controlSize(.small).disabled(state.busy)
+                    if HighballPaths.configuredHome() != nil {
+                        Button(L("Default")) { state.useDefaultHome() }.controlSize(.small).disabled(state.busy)
+                            .help(L("Back to ~/Library/Application Support/Highball, with the data"))
+                    }
+                    if let b = selected {
+                        Button(L("Repair")) { state.repairBottle(b) }.disabled(state.busy)
+                        Button(L("Settings…")) { navigationPath.append(EnvironmentSettingsDestination(name: b.name)) }.help(L("Graphics, compatibility, engine, DLL overrides, environment variables and dependencies for this environment."))
+                        Button(L("Full page…")) { navigationPath.append(EnvironmentProgramsDestination(name: b.name)) }
+                    }
+                    Spacer()
+                    Text(L("Repair re-runs the Windows first boot. Games and Steam stay where they are."))
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                if let b = selected {
-                    Button(L("Repair")) { state.repairBottle(b) }.disabled(state.busy)
-                    Button(L("Settings…")) { settingsName = b.name }.help(L("Graphics, compatibility, engine, DLL overrides, environment variables and dependencies for this environment."))
-                    Button(L("Full page…")) { openName = b.name }
+            }
+            .padding(20)
+            .navigationDestination(for: EnvironmentProgramsDestination.self) { destination in
+                if let bottle = state.bottles.first(where: { $0.name == destination.name }) {
+                    BottleView(bottle: bottle, navigationPath: $navigationPath)
                 }
-                Spacer()
-                Text(L("Repair re-runs the Windows first boot. Games and Steam stay where they are."))
-                    .font(.caption).foregroundStyle(.secondary)
             }
-        }
-        .padding(20)
-        .sheet(isPresented: .init(get: { openName != nil }, set: { if !$0 { openName = nil } })) {
-            if let bottle = state.bottles.first(where: { $0.name == openName }) {
-                NavigationStack {
-                    BottleView(bottle: bottle)
-                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { openName = nil } } }
+            .navigationDestination(for: EnvironmentSettingsDestination.self) { destination in
+                if let bottle = state.bottles.first(where: { $0.name == destination.name }) {
+                    EnvironmentSettingsPage(bottle: bottle)
                 }
-                .frame(minWidth: 780, minHeight: 560)
             }
-        }
-        .sheet(isPresented: .init(get: { settingsName != nil }, set: { if !$0 { settingsName = nil } })) {
-            if let bottle = state.bottles.first(where: { $0.name == settingsName }) {
-                BottleSettingsSheet(bottle: bottle)
+            .sheet(isPresented: $showCreate) { CreateBottleSheet() }
+            .confirmationDialog("Delete environment \"\(pendingDelete ?? "")\"? This removes its Windows drive and everything installed in it, games included.",
+                                isPresented: .init(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                                titleVisibility: .visible) {
+                Button(L("Delete"), role: .destructive) { if let n = pendingDelete { state.deleteBottle(n) }; pendingDelete = nil }
+                Button(L("Cancel"), role: .cancel) { pendingDelete = nil }
             }
-        }
-        .sheet(isPresented: $showCreate) { CreateBottleSheet() }
-        .confirmationDialog("Delete environment \"\(pendingDelete ?? "")\"? This removes its Windows drive and everything installed in it, games included.",
-                            isPresented: .init(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-                            titleVisibility: .visible) {
-            Button(L("Delete"), role: .destructive) { if let n = pendingDelete { state.deleteBottle(n) }; pendingDelete = nil }
-            Button(L("Cancel"), role: .cancel) { pendingDelete = nil }
         }
     }
 
@@ -179,7 +182,7 @@ struct EnvironmentsPane: View {
         .background(RoundedRectangle(cornerRadius: 10).fill(HB.card))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(isSelected ? HB.amber.opacity(0.6) : HB.cardStroke))
         .contextMenu {
-            Button(L("Full page…")) { openName = bottle.name }
+            Button(L("Full page…")) { navigationPath.append(EnvironmentProgramsDestination(name: bottle.name)) }
             Button(L("Stop all processes")) { state.killBottle(bottle) }
             Button(L("Duplicate")) { state.duplicateBottle(bottle) }
             Button(L("Repair (re-run the Windows first boot)")) { state.repairBottle(bottle) }

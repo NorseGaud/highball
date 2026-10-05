@@ -9,6 +9,12 @@ func L(_ en: String) -> String {
 
 enum L10n {
     static let fr: [String: String] = [
+        "Display": "Affichage",
+        "Changes save automatically": "Les modifications sont enregistrées automatiquement",
+        "Choose a store or a Windows program you already have.": "Choisissez une boutique ou un programme Windows que vous possédez déjà.",
+        "Install games through the Windows Steam client.": "Installez des jeux avec le client Steam pour Windows.",
+        "Connect your Epic account to see and download your games.": "Connectez votre compte Epic pour voir et télécharger vos jeux.",
+        "Choose an .exe, .msi or .bat file, or drop it on this window.": "Choisissez un fichier .exe, .msi ou .bat, ou déposez-le sur cette fenêtre.",
         "Share game activity with Discord": "Partager l’activité de jeu avec Discord",
         "Let Discord show what you play and the game's Rich Presence while both apps are open. Off by default.": "Autoriser Discord à afficher vos jeux et leur Rich Presence lorsque les deux applications sont ouvertes. Désactivé par défaut.",
         "Frame generation (Lossless Scaling, beta)": "Génération d’images (Lossless Scaling, bêta)",

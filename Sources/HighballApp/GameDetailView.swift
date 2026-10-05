@@ -6,7 +6,6 @@ import HighballKit
 struct GameDetailView: View {
     @Environment(AppState.self) private var state
     let passedItem: LibraryItem
-    @State private var showBottleSettings = false
     @State private var coverDropTargeted = false
     /// The live row: after an install, a delete or a rename, the passed-in copy goes stale.
     private var item: LibraryItem { state.libraryItems.first { $0.id == passedItem.id } ?? passedItem }
@@ -55,9 +54,6 @@ struct GameDetailView: View {
         }
         .background(BottleBackdrop())
         .navigationTitle(state.displayTitle(item))
-        .sheet(isPresented: $showBottleSettings) {
-            if let bottle { BottleSettingsSheet(bottle: bottle) }
-        }
     }
 
     // MARK: Pieces
@@ -360,7 +356,7 @@ struct GameDetailView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(L("Environment")).font(.caption).foregroundStyle(.secondary).frame(width: 110, alignment: .leading)
                             Text(bottle.name).font(.callout)
-                            Button(L("Environment settings…")) { showBottleSettings = true }.controlSize(.small)
+                            NavigationLink(L("Environment settings…"), value: EnvironmentSettingsDestination(name: bottle.name)).controlSize(.small)
                         }
                         if !item.otherBottles.isEmpty {
                             row(L("Also installed in"), item.otherBottles.joined(separator: ", "))

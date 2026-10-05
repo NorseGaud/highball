@@ -182,6 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct ContentView: View {
     @Environment(AppState.self) private var state
+    @State private var showAddGames = false
 
     /// Where a dropped or chosen program runs: the environment page it came from, else the default.
     private var runTarget: Bottle? {
@@ -264,34 +265,30 @@ struct ContentView: View {
         } else {
             // One library, full width (UX plan Phase 1): no sidebar, no bottles in the way.
             // Environments and the engine live in Settings (⌘,).
-            NavigationStack { LibraryView() }
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            Button(state.defaultBottle.map(state.steamInstalled) == true ? L("Open Steam") : L("Install Steam")) { state.installSteam() }
-                            if state.epicSignedIn {
-                                // The menu said "Connect" even once connected (0.8.0 feedback).
-                                Button(L("Epic account connected")) {}.disabled(true)
-                            } else {
-                                Button(L("Connect Epic account…")) { state.showEpicSignIn = true }
-                            }
-                            Divider()
-                            ForEach(BottleView.launcherMeta.filter { $0.id != "steam" }, id: \.id) { meta in
-                                Button(String(format: state.launcherInstalled(meta.id) ? L("Open %@") : L("Install %@"), meta.short)) {
-                                    state.openOrInstallLauncher(meta.id, short: meta.short)
-                                }
-                            }
-                            Divider()
-                            Button(L("A Windows program I have…")) { state.chooseProgramToRun() }
-                        } label: {
-                            Label(L("Add games"), systemImage: "plus")
+            NavigationStack {
+                LibraryView()
+                    .navigationDestination(isPresented: $showAddGames) { AddGamesView() }
+                    .navigationDestination(for: EnvironmentSettingsDestination.self) { destination in
+                        if let bottle = state.bottles.first(where: { $0.name == destination.name }) {
+                            EnvironmentSettingsPage(bottle: bottle)
                         }
-                        .disabled(state.busy || state.bottles.isEmpty)
                     }
-                    ToolbarItem(placement: .automatic) {
-                        SettingsLink { Label(L("Settings"), systemImage: "gearshape") }
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            if !showAddGames {
+                                Button { showAddGames = true } label: {
+                                    Label(L("Add games"), systemImage: "plus")
+                                }
+                                .disabled(state.busy || state.bottles.isEmpty)
+                            }
+                        }
+                        ToolbarItem(placement: .automatic) {
+                            if !showAddGames {
+                                SettingsLink { Label(L("Settings"), systemImage: "gearshape") }
+                            }
+                        }
                     }
-                }
+            }
         }
     }
     private var crashTitle: String {
