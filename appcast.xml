@@ -6,7 +6,7 @@
     <description>Run Windows games on Apple Silicon.</description>
     <item>
       <title>Highball 0.10.6</title>
-      <description><![CDATA[The default engine keeps data execution prevention on (r21), the library opens on an Installed games row with Play on each cover, games in a second Steam library folder show up, and the database gains a Bloody Spell recipe]]></description>
+      <description><![CDATA[The default engine keeps data execution prevention on (r21), the library opens on an Installed games row with Play on each cover, and games in a second Steam library folder show up]]></description>
       <pubDate>Mon, 05 Oct 2026 00:52:55 +0200</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:channel>beta</sparkle:channel>
