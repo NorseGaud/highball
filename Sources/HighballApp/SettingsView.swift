@@ -226,6 +226,7 @@ struct EnginePane: View {
     @State private var showLicense = false
 
     var body: some View {
+        @Bindable var state = state
         VStack(alignment: .leading, spacing: 14) {
             Text(L("The engine is the Wine build and graphics layers Highball runs games with. Highball picks it; an update never moves an environment to a different Wine build on its own."))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -252,6 +253,13 @@ struct EnginePane: View {
                             if on { (NSApp.delegate as? AppDelegate)?.updaterController.updater.checkForUpdatesInBackground() }
                         }
                     Text(L("Each release goes to beta a day or two before everyone else, less tested. Turning this off keeps the build you have until the next stable one is newer."))
+                        .font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            GroupBox {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle(L("Share game activity with Discord"), isOn: $state.discordSharingEnabled)
+                    Text(L("Let Discord show what you play and the game's Rich Presence while both apps are open. Off by default."))
                         .font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }

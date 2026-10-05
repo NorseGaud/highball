@@ -809,6 +809,7 @@ final class AppState {
         installWatcher?.watch(bottles.flatMap(installDirectories) + MacSteam.steamappsDirectories())
         macSteamGames = MacSteam.installedGames()
         startSteamClientWatch()
+        startDiscordWatch()
         libraryPlays = libraryStore.load()
         libraryOverrides = libraryStore.rendererOverrides()
         rebuildLibrary()
@@ -1641,6 +1642,90 @@ final class AppState {
     var steamClients: Set<String> = []
     @ObservationIgnored private var steamClientWatch: Task<Void, Never>?
 
+    @ObservationIgnored private var discordWatch: Task<Void, Never>?
+    @ObservationIgnored private var discordWatchID: UUID?
+    @ObservationIgnored private var discordStopping: Task<Void, Never>?
+    @ObservationIgnored private var discordEnvironments: [UUID: [String: String]] = [:]
+
+    var discordSharingEnabled = UserDefaults.standard.bool(forKey: DiscordPresence.enabledDefaultsKey) {
+        didSet {
+            UserDefaults.standard.set(discordSharingEnabled, forKey: DiscordPresence.enabledDefaultsKey)
+            DiscordPresence.shared.setEnabled(discordSharingEnabled)
+            if discordSharingEnabled { startDiscordWatch() }
+            else { stopDiscordWatch(); discordEnvironments.removeAll() }
+        }
+    }
+
+    private var discordIsOpen: Bool {
+        NSWorkspace.shared.runningApplications.contains {
+            ["com.hnc.Discord", "com.hnc.DiscordPTB", "com.hnc.DiscordCanary"].contains($0.bundleIdentifier ?? "")
+        }
+    }
+
+    private func stopDiscordWatch() {
+        guard let watch = discordWatch else { return }
+        watch.cancel()
+        discordWatch = nil
+        discordWatchID = nil
+        discordStopping = Task.detached(priority: .utility) {
+            // Close helpers now, even if the cancelled worker is awaiting a catalog response.
+            DiscordPresence.shared.stop()
+            await watch.value
+        }
+    }
+
+    /// Only the session watcher asks for a game's environment, reusing its process list.
+    private func discordEnvironmentPrefix(for session: GameSession) -> URL? {
+        guard discordSharingEnabled, discordIsOpen, runningSessions.contains(session),
+              discordEnvironments[session.id] == nil else { return nil }
+        return bottles.first { $0.name == session.bottleName }?.url
+    }
+
+    private func rememberDiscordEnvironment(_ environment: [String: String], for session: GameSession) {
+        guard discordSharingEnabled, discordIsOpen, runningSessions.contains(session) else { return }
+        discordEnvironments[session.id] = environment
+        startDiscordWatch()
+    }
+
+    private func startDiscordWatch() {
+        guard discordSharingEnabled, !runningSessions.isEmpty, discordWatch == nil, discordIsOpen else { return }
+        DiscordPresence.shared.setEnabled(true)
+        let stopping = discordStopping
+        let id = UUID()
+        discordWatchID = id
+        discordWatch = Task.detached(priority: .utility) { [weak self] in
+            // Complete the previous shutdown before creating another helper after a quick toggle.
+            await stopping?.value
+            let presence = DiscordPresence.shared
+            while !Task.isCancelled {
+                guard let self else { break }
+                let (sessions, bottles, engines, environments, paths, discordOpen) = await MainActor.run { [self] in
+                    (self.runningSessions, self.bottles, self.engines, self.discordEnvironments, self.paths, self.discordIsOpen)
+                }
+                guard !Task.isCancelled, discordOpen, !sessions.isEmpty else { break }
+                let activeBottles = bottles.filter { bottle in sessions.contains { $0.bottleName == bottle.name } }
+                presence.retainBridges(for: activeBottles.map(\.url))
+                for bottle in activeBottles {
+                    guard !Task.isCancelled,
+                          let session = sessions.first(where: { $0.bottleName == bottle.name && environments[$0.id] != nil }),
+                          let env = environments[session.id],
+                          let engine = engines.first(where: { $0.id == bottle.settings.engineID }) else { continue }
+                    presence.ensureBridge(engine: engine, bottle: bottle, environment: env)
+                }
+                await presence.update(games: DiscordSessions.games(sessions), paths: paths)
+                do { try await Task.sleep(for: .seconds(5)) } catch { break }
+            }
+            presence.stop()
+            await self?.discordWatchFinished(id)
+        }
+    }
+
+    private func discordWatchFinished(_ id: UUID) {
+        guard discordWatchID == id else { return }
+        discordWatch = nil
+        discordWatchID = nil
+    }
+
     private func startSteamClientWatch() {
         guard steamClientWatch == nil else { return }
         steamClientWatch = Task.detached(priority: .utility) { [weak self] in
@@ -1762,28 +1847,44 @@ final class AppState {
 
     func session(forAppID appid: Int) -> GameSession? { runningSessions.first { $0.appid == appid } }
 
-    private func beginSession(_ session: GameSession) {
+    private func beginSession(_ session: GameSession, processList: String) {
         runningSessions.append(session)
         appendLog("\(session.title) is running")
         if !FunnelLog.records(in: paths.logs).contains(where: { $0.event == .firstGameProcess }) { funnel(.firstGameProcess) }
         sessionWatchers[session.id] = Task.detached { [weak self] in
+            if let prefix = await self?.discordEnvironmentPrefix(for: session),
+               let env = DiscordSessions.environment(for: session, prefix: prefix, processList: processList) {
+                await self?.rememberDiscordEnvironment(env, for: session)
+            }
             // A game that is gone for two consecutive checks has ended; one miss can be a
             // process table read racing a restart (some games relaunch themselves once).
             // Detached: the `ps` behind isAlive must never run on the main thread.
             var misses = 0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
-                if SessionWatch.isAlive(markers: session.markers, ps: SessionWatch.currentProcessList()) { misses = 0; continue }
+                let processes = SessionWatch.currentProcessList()
+                if SessionWatch.isAlive(markers: session.markers, ps: processes) {
+                    misses = 0
+                    if let prefix = await self?.discordEnvironmentPrefix(for: session),
+                       let env = DiscordSessions.environment(for: session, prefix: prefix, processList: processes) {
+                        await self?.rememberDiscordEnvironment(env, for: session)
+                    }
+                    await self?.startDiscordWatch()
+                    continue
+                }
                 misses += 1
                 if misses >= 2 { break }
             }
             await MainActor.run { self?.endSession(session, reason: "ended") }
         }
+        startDiscordWatch()
     }
 
     private func endSession(_ session: GameSession, reason: String) {
         guard runningSessions.contains(session) else { return }
         runningSessions.removeAll { $0.id == session.id }
+        discordEnvironments[session.id] = nil
+        if runningSessions.isEmpty { stopDiscordWatch() }
         sessionWatchers[session.id]?.cancel()
         sessionWatchers[session.id] = nil
         let record = SessionRecord(title: session.title, bottle: session.bottleName, appid: session.appid,
@@ -1902,7 +2003,9 @@ final class AppState {
                     guard FileManager.default.fileExists(atPath: cef.path) else { return false }
                     return await Task.detached { WineRunner.steamIsRunning(inPrefix: prefix) }.value
                 }
-                return SessionWatch.isAlive(markers: markers, ps: await Self.processList())
+                let processes = await Self.processList()
+                box.processList = processes
+                return SessionWatch.isAlive(markers: markers, ps: processes)
             } crashed: { result in
                 // A program whose file is not a Windows executable never ran: Wine's loader hands
                 // it to start.exe, which reports "File not found" within seconds. Another graphics
@@ -1922,7 +2025,7 @@ final class AppState {
                 steamClients.insert(bottle.name)   // the poll would take up to 8 s to notice
             } else {
                 beginSession(GameSession(title: pin.name, bottleName: bottle.name, appid: nil, markers: markers,
-                                         renderer: (pin.renderer ?? bottle.settings.renderer).rawValue))
+                                         renderer: (pin.renderer ?? bottle.settings.renderer).rawValue), processList: box.processList)
             }
         }
     }
@@ -2064,7 +2167,9 @@ final class AppState {
                 try await runner.start(steam, arguments: ["-silent", "-applaunch", String(game.appid)] + extraArgs, renderer: renderer, extraEnvironment: gameEnvironment, headerNote: note, onOutput: log)
             }
             let handedOff = try await awaitHandoff(box, program: game.name, timeout: 360, exitEndsWait: false) {
-                SessionWatch.isAlive(markers: markers, ps: await Self.processList())
+                let processes = await Self.processList()
+                box.processList = processes
+                return SessionWatch.isAlive(markers: markers, ps: processes)
             } crashed: { result in
                 let current = servedRenderer
                 self.crashSuggestion = CrashSuggestion(program: game.name, bottleName: bottle.name,
@@ -2074,7 +2179,7 @@ final class AppState {
             }
             guard handedOff else { return }
             beginSession(GameSession(title: game.name, bottleName: bottle.name, appid: game.appid, markers: markers,
-                                     renderer: servedRenderer.rawValue))
+                                     renderer: servedRenderer.rawValue), processList: box.processList)
         }
     }
 
@@ -2086,6 +2191,8 @@ final class AppState {
         /// After the hand-off the process's output goes to its file log only, so a client
         /// that lives for hours cannot rewrite a later operation's stage line.
         var handedOff = false
+        /// The existing launch liveness check supplies this; Discord does not run another scan.
+        var processList = ""
     }
 
     private func watchedLaunch(_ box: LaunchOutcome, _ body: @escaping @Sendable () async throws -> LaunchResult) {
@@ -2318,7 +2425,9 @@ final class AppState {
             }
             let markers = SessionWatch.markers(executable: info.executable)
             let handedOff = try await awaitHandoff(box, program: game.app_title, timeout: 360) {
-                SessionWatch.isAlive(markers: markers, ps: await Self.processList())
+                let processes = await Self.processList()
+                box.processList = processes
+                return SessionWatch.isAlive(markers: markers, ps: processes)
             } crashed: { result in
                 let current = renderer ?? bottle.settings.renderer
                 self.crashSuggestion = CrashSuggestion(program: game.app_title, bottleName: bottle.name,
@@ -2328,7 +2437,7 @@ final class AppState {
             }
             guard handedOff else { return }
             beginSession(GameSession(title: game.app_title, bottleName: bottle.name, appid: nil, markers: markers,
-                                     renderer: (renderer ?? bottle.settings.renderer).rawValue))
+                                     renderer: (renderer ?? bottle.settings.renderer).rawValue), processList: box.processList)
         }
     }
 
