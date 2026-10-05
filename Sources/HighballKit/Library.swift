@@ -267,14 +267,23 @@ public struct CoverStore: Sendable {
         id.replacingOccurrences(of: ":", with: "_").replacingOccurrences(of: "/", with: "_")
     }
 
-    /// The stored override for an item, if any.
+    static let extensions = ["png", "jpg", "jpeg", "heic", "webp"]
+
+    /// The stored override for an item, if any. A program's cover is found by its own id when
+    /// the environment it lives in was renamed since (PinID).
     public func coverURL(for id: String) -> URL? {
         let base = dir.appending(path: Self.filename(for: id))
-        for ext in ["png", "jpg", "jpeg", "heic", "webp"] {
+        for ext in Self.extensions {
             let url = base.appendingPathExtension(ext)
             if FileManager.default.fileExists(atPath: url.path) { return url }
         }
-        return nil
+        guard let uuid = PinID.uuid(in: id) else { return nil }
+        let suffix = "_" + uuid
+        return ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+            .filter { Self.extensions.contains($0.pathExtension.lowercased()) }
+            .filter { $0.deletingPathExtension().lastPathComponent.hasPrefix("pin_") && $0.deletingPathExtension().lastPathComponent.hasSuffix(suffix) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .first
     }
 
     /// Copies the chosen image in (replacing any previous override).
@@ -354,9 +363,25 @@ public struct CoverStore: Sendable {
         return data as Data
     }
 
+    /// Removes the item's override, and for a program every copy kept under an earlier name of
+    /// its environment, so Reset cover really resets.
     public func clearCover(for id: String) {
-        guard let existing = coverURL(for: id) else { return }
-        try? FileManager.default.removeItem(at: existing)
+        for _ in 0..<8 {
+            guard let existing = coverURL(for: id) else { return }
+            guard (try? FileManager.default.removeItem(at: existing)) != nil else { return }
+        }
+    }
+}
+
+/// A program's library id carries its environment's name ("pin:<bottle>:<uuid>"), so renaming or
+/// swapping environments changes it, and the cover and name chosen for the program went missing
+/// although the files were still there (highball#258, 2026-10-05). The uuid is the program's own
+/// and never changes, so covers and names fall back to it when the full id finds nothing.
+enum PinID {
+    static func uuid(in id: String) -> String? {
+        guard id.hasPrefix("pin:"), let last = id.split(separator: ":").last,
+              UUID(uuidString: String(last)) != nil else { return nil }
+        return String(last)
     }
 }
 
@@ -377,13 +402,26 @@ public struct NameStore: Sendable {
         return (try? JSONDecoder().decode([String: String].self, from: d)) ?? [:]
     }
 
-    public func name(for id: String) -> String? { names()[id] }
+    public func name(for id: String) -> String? { Self.name(for: id, in: names()) }
+
+    /// The name for an id in a loaded table: the id itself, or for a program the name kept under
+    /// an earlier name of its environment (PinID).
+    public static func name(for id: String, in names: [String: String]) -> String? {
+        if let exact = names[id] { return exact }
+        guard let uuid = PinID.uuid(in: id) else { return nil }
+        return names.filter { $0.key.hasPrefix("pin:") && $0.key.hasSuffix(":" + uuid) }.sorted { $0.key < $1.key }.first?.value
+    }
 
     /// Sets a name, or clears it when the name is empty once trimmed: a blank is a reset, not a
     /// game called nothing.
     public func setName(_ name: String?, for id: String) throws {
         var all = names()
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // A program's name kept under an earlier name of its environment goes, whether this sets
+        // a new name or resets it, or the reset would show the old one again.
+        if let uuid = PinID.uuid(in: id) {
+            for key in all.keys where key != id && key.hasPrefix("pin:") && key.hasSuffix(":" + uuid) { all.removeValue(forKey: key) }
+        }
         if trimmed.isEmpty { all.removeValue(forKey: id) } else { all[id] = trimmed }
         if all.isEmpty {
             try? FileManager.default.removeItem(at: file)

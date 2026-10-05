@@ -353,7 +353,7 @@ struct LibraryTile: View {
                 Button(L("Reset cover")) { state.resetCover(for: item) }
             }
             Button(L("Rename…")) { state.beginRename(item) }
-            if state.customNames[item.id] != nil {
+            if NameStore.name(for: item.id, in: state.customNames) != nil {
                 Button(L("Reset name")) { state.resetName(for: item) }
             }
             // A program someone added by hand leaves the library from its tile, not only from

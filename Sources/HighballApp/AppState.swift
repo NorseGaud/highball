@@ -265,7 +265,7 @@ final class AppState {
     var renaming: LibraryItem?
     var renameText = ""
 
-    func displayTitle(_ item: LibraryItem) -> String { customNames[item.id] ?? item.title }
+    func displayTitle(_ item: LibraryItem) -> String { NameStore.name(for: item.id, in: customNames) ?? item.title }
 
     func beginRename(_ item: LibraryItem) {
         renameText = displayTitle(item)
