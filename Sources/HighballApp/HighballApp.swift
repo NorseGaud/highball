@@ -323,11 +323,20 @@ private extension View {
         self.alert(state.pendingEngine.map { String(format: L("%@ needs the %@ engine"), $0.recipe.title, GamePageCopy.shortEngineName($0.manifest)) } ?? "",
                isPresented: .init(get: { state.pendingEngine != nil }, set: { if !$0 { state.pendingEngine = nil } }),
                presenting: state.pendingEngine) { pending in
-            Button(L("Move this environment")) { state.moveEnvironment(for: pending.recipe, bottle: pending.bottle, to: pending.manifest) }
-            Button(String(format: L("New environment for %@"), pending.recipe.title)) { state.createEnvironment(for: pending.recipe, on: pending.manifest) }
+            // With other programs installed here, a new environment is the safe choice and comes
+            // first (highball#262); for an environment holding only this game, moving it is.
+            let others = state.otherProgramCount(in: pending.bottle, besides: pending.recipe)
+            if others > 0 {
+                Button(String(format: L("New environment for %@"), pending.recipe.title)) { state.createEnvironment(for: pending.recipe, on: pending.manifest) }
+                Button(L("Move this environment")) { state.moveEnvironment(for: pending.recipe, bottle: pending.bottle, to: pending.manifest) }
+            } else {
+                Button(L("Move this environment")) { state.moveEnvironment(for: pending.recipe, bottle: pending.bottle, to: pending.manifest) }
+                Button(String(format: L("New environment for %@"), pending.recipe.title)) { state.createEnvironment(for: pending.recipe, on: pending.manifest) }
+            }
             Button(L("Not now"), role: .cancel) { state.pendingEngine = nil }
         } message: { pending in
-            Text(GamePageCopy.engineAsk(recipe: pending.recipe, manifest: pending.manifest, installed: state.engines.contains { $0.id == pending.manifest.id }))
+            Text(GamePageCopy.engineAsk(recipe: pending.recipe, manifest: pending.manifest, installed: state.engines.contains { $0.id == pending.manifest.id },
+                                        others: state.otherProgramCount(in: pending.bottle, besides: pending.recipe)))
         }
     }
     @MainActor func updateAsk(_ state: AppState) -> some View {

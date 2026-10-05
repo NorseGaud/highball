@@ -1226,6 +1226,13 @@ final class AppState {
     /// or re-runs the Windows setup without asking: the ask offers a new environment on that
     /// engine (other programs untouched) or moving this one.
     var pendingEngine: (recipe: HighballKit.Recipe, bottle: Bottle, manifest: EngineManifest)?
+    /// How many other programs an environment has installed, the ones a move would carry onto the
+    /// engine too: Steam games ready to play other than the recipe's own, plus added programs.
+    func otherProgramCount(in bottle: Bottle, besides recipe: HighballKit.Recipe) -> Int {
+        let own = gameDB.byTitle.values.first { $0.id == recipe.id }?.steam_appid
+        let games = (gamesByBottle[bottle.name] ?? []).filter { $0.isReady && $0.appid != own }
+        return games.count + bottle.settings.pins.count
+    }
 
     /// A recipe naming an engine this build does not ship: the database moved ahead of the
     /// app (The Last Flame's fix needs r11, which 0.9.33 was the first to carry). The ask

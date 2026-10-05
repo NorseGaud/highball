@@ -20,9 +20,17 @@ extension GamePageCopy {
                       recipe.title, engineID, play)
     }
 
-    static func engineAsk(recipe: HighballKit.Recipe, manifest: EngineManifest, installed: Bool) -> String {
+    /// `others` is how many other programs the environment has installed (Steam games and added
+    /// programs): moving the environment moves them all onto the engine, which a player found out
+    /// the hard way when an old revision could not show Steam's window (highball#262).
+    static func engineAsk(recipe: HighballKit.Recipe, manifest: EngineManifest, installed: Bool, others: Int) -> String {
         let download = installed ? "" : String(format: L(", after a download of about %@"), downloadSize(manifest))
-        return String(format: L("%@ is verified on the %@ engine, and this environment is not on it. Moving this environment switches it there%@ and keeps everything installed; the Windows setup re-runs when needed, a minute or two. A new environment keeps your other programs where they are and starts empty, so the game has to be installed again."),
-                      recipe.title, shortEngineName(manifest), download)
+        if others == 0 {
+            return String(format: L("%@ is verified on the %@ engine, and this environment is not on it. Moving this environment switches it there%@ and keeps everything installed; the Windows setup re-runs when needed, a minute or two. A new environment starts empty, so the game has to be installed again."),
+                          recipe.title, shortEngineName(manifest), download)
+        }
+        let programs = others == 1 ? L("the other program installed here") : String(format: L("the %d other programs installed here"), others)
+        return String(format: L("%@ is verified on the %@ engine, and this environment is not on it. A new environment keeps %@ where they are and starts empty, so the game has to be installed again. Moving this environment switches it there%@ and keeps everything installed, but %@ then run on that engine too, which suits some games and not others; the Windows setup re-runs when needed, a minute or two."),
+                      recipe.title, shortEngineName(manifest), programs, download, programs)
     }
 }
