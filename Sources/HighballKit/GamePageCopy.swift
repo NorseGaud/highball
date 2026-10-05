@@ -88,14 +88,26 @@ public enum GamePageCopy {
 
     /// What Play applies, in order, from the row and the fix recipe. `applied` means the recipe
     /// already ran in this environment, so its steps read as done.
+    /// `needsDirect3D12`: the program only has Direct3D 12 (`ProgramNeeds.wantsDirect3D12`), so a
+    /// mode without it gives way at Play (`Renderer.direct3D12TakeOver`) and the plan says so.
     public static func willDo(_ entry: GameDBEntry?, recipe: Recipe?, applied: Bool,
                               bottleRenderer: Renderer, explicit: Bool = false, gameOverride: Renderer? = nil,
+                              needsDirect3D12: Bool = false,
                               osMajor: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion) -> [WillDo] {
         var items: [WillDo] = []
+        let rowMode = entry?.effectiveRenderer(osMajor: osMajor)
+        let direct3D12Mode = (rowMode?.servesDirect3D12 == true ? rowMode : nil) ?? .d3dmetal
+        let givesWay = needsDirect3D12 && !bottleRenderer.servesDirect3D12 && (explicit || rowMode == nil)
         if entry?.nativeVulkan == true {
             items.append(WillDo(text: "Let it draw with Vulkan directly; the graphics mode does not apply to this game"))
         } else if let gameOverride {
             items.append(WillDo(text: "Use \(plainName(gameOverride)) for this game (set by you); the environment stays on \(plainName(bottleRenderer))"))
+        } else if givesWay {
+            // The launch switches (Renderer.direct3D12TakeOver); the plan must not promise the
+            // environment's mode for a game that cannot run in it.
+            items.append(WillDo(text: explicit
+                                ? "Use \(plainName(direct3D12Mode)) for this game: it only has DirectX 12, which \(plainName(bottleRenderer)), your environment's setting, does not have. The environment keeps \(plainName(bottleRenderer)) for everything else"
+                                : "Use \(plainName(direct3D12Mode)) for this game: it only has DirectX 12, which the environment's \(plainName(bottleRenderer)) does not have"))
         } else if explicit {
             if let wanted = entry?.effectiveRenderer(osMajor: osMajor), wanted != bottleRenderer {
                 items.append(WillDo(text: "Use \(plainName(bottleRenderer)), your environment's setting. The database asks for \(plainName(wanted)), and an environment's own setting wins"))
@@ -132,9 +144,13 @@ public enum GamePageCopy {
     /// no per-game choice exists yet. The game page offers it for this game alone, so the reader
     /// is never left with a plan that names two graphics modes (2026-09-11 walkthrough).
     public static func rowRendererHeldBack(_ entry: GameDBEntry?, bottleRenderer: Renderer, explicit: Bool, gameOverride: Renderer?,
+                                           needsDirect3D12: Bool = false,
                                            osMajor: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion) -> Renderer? {
         guard explicit, gameOverride == nil, entry?.nativeVulkan != true,
               let wanted = entry?.effectiveRenderer(osMajor: osMajor), wanted != bottleRenderer else { return nil }
+        // Nothing is held back from a program that only has Direct3D 12: Play already gives it
+        // the row's mode when the environment's has no Direct3D 12 (Renderer.direct3D12TakeOver).
+        if needsDirect3D12, !bottleRenderer.servesDirect3D12, wanted.servesDirect3D12 { return nil }
         return wanted
     }
 

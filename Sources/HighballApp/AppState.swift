@@ -413,16 +413,17 @@ final class AppState {
             // A program that needs Direct3D 12 cannot run on DXMT, DXVK or Wine's Direct3D, so a
             // mode that has it takes over before the launch, and the log says so (Farming
             // Simulator 22 stopped at "Shader model 6.0 is required" on DXMT, highball#139;
-            // Unreal 5 titles stop before their menu, highball#138). Only when nothing more
-            // specific chose the mode: a row's verified mode or a per-game choice stands.
-            if !wanted.servesDirect3D12, renderer == nil, rendererOverride(for: item) == nil, entry?.effectiveRenderer() == nil,
-               entry?.nativeVulkan != true, programNeedsDirect3D12(item) {
-                let instead = Renderer.forDirect3D12Only(chosen: wanted, engine: engine)
-                if instead != wanted {
-                    appendLog("\(item.title) needs Direct3D 12 and \(GamePageCopy.plainName(wanted)) has none, playing with \(GamePageCopy.plainName(instead)).")
-                    wanted = instead
-                    renderer = instead
-                }
+            // Unreal 5 titles stop before their menu, highball#138). A per-game choice and a
+            // row's verified mode stand; an environment's explicit mode stands too, except for a
+            // program it cannot run at all (Forza Horizon 6 on a DXMT environment, 2026-10-06).
+            if let instead = Renderer.direct3D12TakeOver(chosen: wanted, requested: renderer, gameOverride: rendererOverride(for: item),
+                                                         row: entry?.effectiveRenderer(), environmentExplicit: bottle.settings.rendererExplicit,
+                                                         nativeVulkan: entry?.nativeVulkan == true, engine: engine,
+                                                         programNeedsDirect3D12: { self.programNeedsDirect3D12(item) }) {
+                let kept = bottle.settings.rendererExplicit ? " \(bottle.name) keeps \(GamePageCopy.plainName(wanted)) for everything else." : ""
+                appendLog("\(item.title) needs Direct3D 12 and \(GamePageCopy.plainName(wanted)) has none, playing with \(GamePageCopy.plainName(instead)).\(kept)")
+                wanted = instead
+                renderer = instead
             }
             switch wanted.availability(in: engine) {
             case .available:

@@ -117,6 +117,29 @@ extension GamePageCopyTests {
         XCTAssertNil(GamePageCopy.rowRendererHeldBack(e, bottleRenderer: .dxmt, explicit: true, gameOverride: nil, osMajor: 26))
     }
 
+    /// The page and the launch agree on a program that only has Direct3D 12: the plan names the mode
+    /// Play will really use and offers nothing for this game alone (0.10.9 release pass, 2026-10-06).
+    func testADirect3D12OnlyGameIsNeverPromisedAModeWithoutIt() throws {
+        let forza = try entry(#"{"id":"forza-horizon-6","title":"Forza Horizon 6","steam_appid":2483190,"status":"verified-local","renderer":"d3dmetal"}"#)
+        XCTAssertEqual(GamePageCopy.willDo(forza, recipe: nil, applied: false, bottleRenderer: .dxmt, explicit: true, needsDirect3D12: true, osMajor: 27).first?.text,
+                       "Use Apple's DirectX 12 support for this game: it only has DirectX 12, which DXMT (DirectX 11 on Metal), your environment's setting, does not have. The environment keeps DXMT (DirectX 11 on Metal) for everything else")
+        XCTAssertNil(GamePageCopy.rowRendererHeldBack(forza, bottleRenderer: .dxmt, explicit: true, gameOverride: nil, needsDirect3D12: true, osMajor: 27),
+                     "Play already uses the row's mode, so there is nothing to offer")
+        // A game with another graphics path: the environment's explicit mode wins as before, and the
+        // page still offers the row's mode for this game.
+        XCTAssertEqual(GamePageCopy.willDo(forza, recipe: nil, applied: false, bottleRenderer: .dxmt, explicit: true, needsDirect3D12: false, osMajor: 27).first?.text,
+                       "Use DXMT (DirectX 11 on Metal), your environment's setting. The database asks for Apple's DirectX 12 support, and an environment's own setting wins")
+        XCTAssertEqual(GamePageCopy.rowRendererHeldBack(forza, bottleRenderer: .dxmt, explicit: true, gameOverride: nil, needsDirect3D12: false, osMajor: 27), .d3dmetal)
+        // No row, environment on Automatic: the plan now says what Play has done since highball#139.
+        XCTAssertEqual(GamePageCopy.willDo(nil, recipe: nil, applied: false, bottleRenderer: .dxmt, explicit: false, needsDirect3D12: true, osMajor: 27).first?.text,
+                       "Use Apple's DirectX 12 support for this game: it only has DirectX 12, which the environment's DXMT (DirectX 11 on Metal) does not have")
+        // A row that chose, or a per-game choice, is told as before.
+        XCTAssertEqual(GamePageCopy.willDo(forza, recipe: nil, applied: false, bottleRenderer: .dxmt, explicit: false, needsDirect3D12: true, osMajor: 27).first?.text,
+                       "Use Apple's DirectX 12 support for this game, the way it was verified, instead of the environment's DXMT (DirectX 11 on Metal)")
+        XCTAssertEqual(GamePageCopy.willDo(forza, recipe: nil, applied: false, bottleRenderer: .dxmt, explicit: true, gameOverride: .d3dmetal, needsDirect3D12: true, osMajor: 27).first?.text,
+                       "Use Apple's DirectX 12 support for this game (set by you); the environment stays on DXMT (DirectX 11 on Metal)")
+    }
+
     func testFpsPhraseKeepsTheFigureAndWhereItWasRead() {
         XCTAssertEqual(GamePageCopy.fpsPhrase("60 to 82"), "60 to 82 frames per second")
         XCTAssertEqual(GamePageCopy.fpsPhrase("111.8 fps"), "111.8 fps")

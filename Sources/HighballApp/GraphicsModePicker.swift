@@ -40,7 +40,7 @@ struct GraphicsModePicker: View {
                 .labelsHidden().frame(maxWidth: 260)
             }
             Text(live.settings.rendererExplicit
-                 ? String(format: L("%@ for every game in this environment, whatever the database says."), GamePageCopy.plainName(live.settings.renderer))
+                 ? String(format: L("%@ for every game in this environment, whatever the database says. A game that only has DirectX 12 still gets a mode that has it."), GamePageCopy.plainName(live.settings.renderer))
                  : String(format: L("The mode verified for each game; %@ for games without a verdict."), GamePageCopy.plainName(live.settings.renderer)))
                 .font(.caption).foregroundStyle(.secondary)
         }

@@ -517,7 +517,7 @@ enum L10n {
         "titles": "titres",
 
         // Whole-app review 2026-09-04: environment wording, Settings, game page
-        "%@ for every game in this environment, whatever the database says.": "%@ pour tous les jeux de cet environnement, quoi que dise la base.",
+        "%@ for every game in this environment, whatever the database says. A game that only has DirectX 12 still gets a mode that has it.": "%@ pour tous les jeux de cet environnement, quoi que dise la base. Un jeu qui n'a que DirectX 12 reçoit quand même un mode qui l'a.",
         "%d titles": "%d titres",
         // An environment that already fits a game's engine, and the windows Highball brings forward (highball-db#318, highball#264)
         "%d installed": "%d installés",

@@ -116,6 +116,31 @@ public enum Renderer: String, Codable, CaseIterable, Sendable {
         return chosen
     }
 
+    /// The mode a launch switches to because the program only has Direct3D 12 and the mode
+    /// chosen for it has none, or nil when the chosen mode stands.
+    ///
+    /// A choice made for this game alone (the caller's mode, a per-game mode) always stands, and
+    /// so does a native Vulkan title, which ignores the graphics mode. A database row's verified
+    /// mode stands when it is what chose. An environment's explicit mode stands for every game it
+    /// can run, but not for one it cannot run at all: Forza Horizon 6 imports Direct3D 12 and no
+    /// other graphics API, its row says D3DMetal, and on an environment set to DXMT by hand the
+    /// row was held back and nothing else stepped in, so the launch went to DXMT and stalled (the
+    /// 0.10.9 release pass on an M4, 2026-10-06). The same environment without a row for the game
+    /// already switched (highball#139), so a row could only make things worse, which it must not.
+    /// The row's own mode is used when it has Direct3D 12, else `forDirect3D12Only` decides. The
+    /// environment's setting does not change; this launch alone runs with the returned mode.
+    /// `programNeedsDirect3D12` reads the program's imports, so it is asked last.
+    public static func direct3D12TakeOver(chosen: Renderer, requested: Renderer?, gameOverride: Renderer?, row: Renderer?,
+                                          environmentExplicit: Bool, nativeVulkan: Bool, engine: InstalledEngine,
+                                          programNeedsDirect3D12: () -> Bool) -> Renderer? {
+        guard !chosen.servesDirect3D12, requested == nil, gameOverride == nil, !nativeVulkan else { return nil }
+        if row != nil, !environmentExplicit { return nil }
+        guard programNeedsDirect3D12() else { return nil }
+        if let row, row.servesDirect3D12, row.availability(in: engine) != .notShipped { return row }
+        let instead = forDirect3D12Only(chosen: chosen, engine: engine)
+        return instead == chosen ? nil : instead
+    }
+
     /// The backend to offer after `current` failed on launch, cycling through the Metal-backed
     /// options. Direct3D 9 no longer constrains this: `withD9VK` attaches DXVK's d3d9 to every
     /// renderer, so switching backend can't drop D3D9 support the way it could before 0.7.17.

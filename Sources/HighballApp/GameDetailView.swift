@@ -34,7 +34,8 @@ struct GameDetailView: View {
     private var verdict: GamePageCopy.Verdict { GamePageCopy.verdict(entry, myChip: state.machineChip) }
     private var willDo: [GamePageCopy.WillDo] {
         GamePageCopy.willDo(entry, recipe: fixRecipe, applied: fixApplied, bottleRenderer: bottle?.settings.renderer ?? .dxvk,
-                            explicit: bottle?.settings.rendererExplicit ?? false, gameOverride: state.rendererOverride(for: item))
+                            explicit: bottle?.settings.rendererExplicit ?? false, gameOverride: state.rendererOverride(for: item),
+                            needsDirect3D12: item.installed && entry?.nativeVulkan != true && state.programNeedsDirect3D12(item))
     }
     private var engineName: String? { bottle.flatMap { state.engine(for: $0) }?.displayName }
 
@@ -253,7 +254,8 @@ struct GameDetailView: View {
             }
             if let held = GamePageCopy.rowRendererHeldBack(entry, bottleRenderer: bottle?.settings.renderer ?? .dxvk,
                                                            explicit: bottle?.settings.rendererExplicit ?? false,
-                                                           gameOverride: state.rendererOverride(for: item)),
+                                                           gameOverride: state.rendererOverride(for: item),
+                                                           needsDirect3D12: item.installed && state.programNeedsDirect3D12(item)),
                let engine = bottle.flatMap({ state.engine(for: $0) }), held.availability(in: engine) == .available {
                 Button(String(format: L("Use %@ for this game"), GamePageCopy.plainName(held))) {
                     state.setRendererOverride(held, for: item.id)

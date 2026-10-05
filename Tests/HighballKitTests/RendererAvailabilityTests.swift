@@ -63,6 +63,45 @@ final class RendererAvailabilityTests: XCTestCase {
         XCTAssertEqual(Renderer.forDirect3D12Only(chosen: .dxmt, engine: try engine(ships: ["dxmt", "dxvk", "d9vk"], accepted: true)), .dxmt)
     }
 
+    /// Forza Horizon 6 imports Direct3D 12 and no other graphics API, its row says D3DMetal, and on
+    /// an environment set to DXMT by hand Play launched it on DXMT, where it stalled (0.10.9 release
+    /// pass, M4, 2026-10-06). The environment's explicit mode stands for every game it can run.
+    func testAnExplicitEnvironmentModeGivesWayOnlyToAProgramItCannotRun() throws {
+        let full = try engine(accepted: true)
+        func takeOver(chosen: Renderer = .dxmt, requested: Renderer? = nil, gameOverride: Renderer? = nil, row: Renderer?,
+                      explicit: Bool, nativeVulkan: Bool = false, needs12: Bool, engine: InstalledEngine? = nil) -> Renderer? {
+            Renderer.direct3D12TakeOver(chosen: chosen, requested: requested, gameOverride: gameOverride, row: row,
+                                        environmentExplicit: explicit, nativeVulkan: nativeVulkan, engine: engine ?? full,
+                                        programNeedsDirect3D12: { needs12 })
+        }
+        // The case of the pass: explicit DXMT, the row's D3DMetal, a Direct3D 12-only program.
+        XCTAssertEqual(takeOver(row: .d3dmetal, explicit: true, needs12: true), .d3dmetal)
+        // The row's own Direct3D 12 mode is preferred over the generic choice.
+        XCTAssertEqual(takeOver(row: .vkd3d, explicit: true, needs12: true, engine: try engine(ships: ["dxmt", "dxvk", "d9vk", "d3dmetal", "vkd3d"], accepted: true)), .vkd3d)
+        // A row without Direct3D 12 does not stop the switch when the environment overrode it.
+        XCTAssertEqual(takeOver(row: .dxvk, explicit: true, needs12: true), .d3dmetal)
+        // A program with another graphics path keeps the environment's explicit mode: the promise stands.
+        XCTAssertNil(takeOver(row: .d3dmetal, explicit: true, needs12: false))
+        // Without a row the switch was already made for an explicit environment (highball#139).
+        XCTAssertEqual(takeOver(row: nil, explicit: true, needs12: true), .d3dmetal)
+        XCTAssertEqual(takeOver(row: nil, explicit: false, needs12: true), .d3dmetal)
+        // A row that chose (environment on Automatic) stands, whatever it says.
+        XCTAssertNil(takeOver(row: .dxvk, explicit: false, needs12: true))
+        // A choice for this game alone always stands, and so does a native Vulkan title.
+        XCTAssertNil(takeOver(requested: .dxmt, row: .d3dmetal, explicit: true, needs12: true))
+        XCTAssertNil(takeOver(gameOverride: .dxmt, row: .d3dmetal, explicit: true, needs12: true))
+        XCTAssertNil(takeOver(row: .d3dmetal, explicit: true, nativeVulkan: true, needs12: true))
+        // A chosen mode with Direct3D 12 never switches.
+        XCTAssertNil(takeOver(chosen: .d3dmetal, row: .d3dmetal, explicit: true, needs12: true))
+        // An engine with no Direct3D 12 mode at all: nothing to switch to, the launch fails as before.
+        XCTAssertNil(takeOver(row: .d3dmetal, explicit: true, needs12: true, engine: try engine(ships: ["dxmt", "dxvk", "d9vk"], accepted: true)))
+        // The import check is the expensive part: it is not asked when something else decides.
+        var asked = false
+        _ = Renderer.direct3D12TakeOver(chosen: .dxmt, requested: nil, gameOverride: .dxmt, row: .d3dmetal, environmentExplicit: true,
+                                        nativeVulkan: false, engine: full, programNeedsDirect3D12: { asked = true; return true })
+        XCTAssertFalse(asked, "a per-game choice decides without reading the program")
+    }
+
     // MARK: Availability
 
     func testAvailabilityTellsLicenceFromAbsence() throws {
