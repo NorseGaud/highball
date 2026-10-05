@@ -5,6 +5,14 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.10.9</title>
+      <description><![CDATA[Forza Horizon 6 on macOS 27, Wine 11 engines r18 and r19, Discord presence]]></description>
+      <pubDate>Tue, 06 Oct 2026 00:30:22 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.9/Highball-0.10.9.zip" sparkle:version="0.10.9" sparkle:shortVersionString="0.10.9" sparkle:edSignature="IUn9LvsWbvYu8b2O8gDYbCcpSyntp7LhgPdu6g/a4Rmow5RjujDzJDJ56beVVdKmyw0mNIF30MG/uMLNXC81DA==" length="4560044" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.10.8</title>
       <description><![CDATA[The EA app installs on the Wine 11 engine, switching an environment's engine shows what moves and the steps, ContractVille passes -dx11, the day's M4 checks in the database]]></description>
       <pubDate>Mon, 05 Oct 2026 16:31:33 +0200</pubDate>
