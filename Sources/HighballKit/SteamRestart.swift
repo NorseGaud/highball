@@ -165,7 +165,11 @@ extension WineRunner {
     /// client (highball#152: launching a second program ended the first). Steam's own
     /// `-shutdown` closes the client cleanly; when it does not go within thirty seconds, its
     /// processes alone are signalled. Games and other programs keep running throughout.
+    /// With no client running there is nothing to stop: `steam.exe -shutdown` would boot a whole
+    /// client, web helper and all, only to close it again, 15 to 45 seconds on every first Play
+    /// with a fix that changes the launch environment (measured on an M4, 2026-10-06).
     public func stopSteam() async throws {
+        guard steamIsRunning() else { return }
         let steam = bottle.driveC.appending(path: "Program Files (x86)/Steam/steam.exe")
         _ = try? await run([steam.path, "-shutdown"], renderer: nil, label: "steam-shutdown")
         for _ in 0..<300 where runningSteamEnvironment() != nil { try await Task.sleep(for: .milliseconds(100)) }
