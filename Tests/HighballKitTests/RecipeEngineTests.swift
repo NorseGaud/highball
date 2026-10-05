@@ -181,8 +181,12 @@ final class RecipeEngineTests: XCTestCase {
         guard FileManager.default.fileExists(atPath: recipeURL.path) else { throw XCTSkip("no highball-db checkout beside the repo") }
         let ea = try Recipe.load(from: recipeURL)
         let def = try EngineManifest.load(from: root.appending(path: "spike/engine-manifest.json"))
-        let wine11 = try EngineManifest.load(from: root.appending(path: "spike/engines/x64-crossover26.3-r4.json"))
-        XCTAssertEqual(ea.engine, wine11.id)
+        // Whichever revision the recipe asks for (r4 at first, r15 since 2026-10-05, when the
+        // installer's directory link was found to need the Wine 11 tree), it must be a bundled
+        // Wine 11 engine, so the app can offer it.
+        let named = try XCTUnwrap(ea.engine, "the EA recipe names no engine at the top level")
+        XCTAssertTrue(named.hasPrefix("x64-crossover26.3-"), "the EA app needs the Wine 11 engine, not \(named)")
+        let wine11 = try EngineManifest.load(from: root.appending(path: "spike/engines/\(named).json"))
         XCTAssertEqual(ea.engineToOffer(current: def, known: [def, wine11])?.id, wine11.id, "installing the EA app on the default engine offers Wine 11")
         XCTAssertNil(ea.engineToOffer(current: wine11, known: [def, wine11]))
     }
