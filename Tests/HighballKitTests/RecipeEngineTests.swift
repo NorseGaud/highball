@@ -191,7 +191,7 @@ final class RecipeEngineTests: XCTestCase {
         XCTAssertNil(ea.engineToOffer(current: wine11, known: [def, wine11]))
     }
 
-    /// Forza Horizon 6 needs the Wine 11 tree and D3DMetal 4: its recipe names r19, the app ships
+    /// Forza Horizon 6 needs the Wine 11 tree and D3DMetal 4: its recipe names r18, the app ships
     /// that manifest, Play on the default engine offers it on macOS 27, and a later Wine 11
     /// revision without D3DMetal 4 never passes for it.
     func testTheForzaHorizon6RecipeNamesTheBundledWine11EngineWithD3DMetal4() throws {
