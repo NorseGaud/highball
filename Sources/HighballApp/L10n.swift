@@ -9,6 +9,8 @@ func L(_ en: String) -> String {
 
 enum L10n {
     static let fr: [String: String] = [
+        "Share game activity with Discord": "Partager l’activité de jeu avec Discord",
+        "Let Discord show what you play and the game's Rich Presence while both apps are open. Off by default.": "Autoriser Discord à afficher vos jeux et leur Rich Presence lorsque les deux applications sont ouvertes. Désactivé par défaut.",
         "Frame generation (Lossless Scaling, beta)": "Génération d’images (Lossless Scaling, bêta)",
         "How frame generation works": "Comment fonctionne la génération d’images",
         "Off": "Désactivé",
