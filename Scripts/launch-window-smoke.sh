@@ -2,8 +2,9 @@
 # Launch-window smoke (issue #58): the app must open its main window at launch even when the
 # previous session ended with only the Settings window open. 0.8.0 added a Settings scene and
 # macOS window restoration brought it back alone at relaunch; the library was reachable only via
-# Cmd-N. This reproduces the report's shape on an empty HIGHBALL_HOME: launch, open Settings
-# (Cmd-,), close the main window, quit, relaunch, and assert a main window is visible.
+# Cmd-N. This reproduces the report's shape on an empty HIGHBALL_HOME: launch, open Settings,
+# close the main window, quit, relaunch, and assert a main window is visible. Then the
+# same with Quit and Keep Windows, whose saved state restores no window at all.
 # Needs the screen (Accessibility permission for System Events). Records
 # private/launch-window-smoke/latest.json.
 #
@@ -40,14 +41,35 @@ if [ -z "$(wins)" ] && [ "$("$ROOT/Scripts/winlist" 2>/dev/null | grep "pid=$(pi
   pkill -f "$BIN" 2>/dev/null; rm -rf "$H"; record false "accessibility denied"
   echo "LAUNCH WINDOW SMOKE FAILED: the window is on screen but System Events cannot see it: Accessibility is denied to this shell (System Settings, Privacy & Security, Accessibility)"; exit 1
 fi
-osascript -e "tell application \"System Events\" to tell (first process whose unix id is $(pid)) to keystroke \",\" using command down" >/dev/null 2>&1; sleep 2
-echo "after Cmd-,:         $(wins)"
+# Settings and Quit are pressed in the app's menu through Accessibility rather than typed: a
+# typed Cmd-Q goes to whatever app is in front, so with someone at the Mac it can miss Highball
+# or quit their app instead. The menu items run the same commands as the shortcuts.
+menu(){ osascript -e "tell application \"System Events\" to tell (first process whose unix id is $(pid)) to click menu item \"$1\" of menu 1 of menu bar item 2 of menu bar 1" >/dev/null 2>&1; }
+menu "Settings…"; sleep 2
+echo "after Settings:      $(wins)"
 osascript -e "tell application \"System Events\" to tell (first process whose unix id is $(pid)) to click button 1 of window \"Highball\"" >/dev/null 2>&1; sleep 1
 echo "after closing main:  $(wins)"
-osascript -e "tell application \"System Events\" to tell (first process whose unix id is $(pid)) to keystroke \"q\" using command down" >/dev/null 2>&1; sleep 3
+menu "Quit Highball"; sleep 3
 pgrep -f "$BIN" >/dev/null && pkill -9 -f "$BIN"; sleep 1
 HIGHBALL_HOME="$H" "$BIN" >/dev/null 2>&1 & sleep 7
 w=$(wins); echo "after relaunch:      $w"
+if ! echo "$w" | grep -q 'Highball'; then
+  pkill -f "$BIN" 2>/dev/null; rm -rf "$H"
+  record false "$w"; echo "LAUNCH WINDOW SMOKE FAILED: no main window after relaunch (windows: $w)"; exit 1
+fi
+# The same session saved on purpose: Quit and Keep Windows with only Settings open (also what any
+# quit does with "Close windows when quitting an application" off). That state restores zero
+# windows, and every launch after it came back with none (2026-10-06, three gate runs).
+menu "Settings…"; sleep 2
+osascript -e "tell application \"System Events\" to tell (first process whose unix id is $(pid)) to click button 1 of window \"Highball\"" >/dev/null 2>&1; sleep 1
+echo "settings only again: $(wins)"
+menu "Quit and Keep Windows"; sleep 3
+pgrep -f "$BIN" >/dev/null && pkill -9 -f "$BIN"; sleep 1
+HIGHBALL_HOME="$H" "$BIN" >/dev/null 2>&1 & sleep 7
+w=$(wins); echo "after kept relaunch: $w"
+# A plain quit with the main window open discards the kept state, so the next launch of any
+# Highball on this Mac (the installed one too) starts clean.
+menu "Quit Highball"; sleep 3
 pkill -f "$BIN" 2>/dev/null; rm -rf "$H"
-if echo "$w" | grep -q 'Highball'; then record true "$w"; echo "LAUNCH WINDOW SMOKE PASSED (main window present after relaunch)"; exit 0
-else record false "$w"; echo "LAUNCH WINDOW SMOKE FAILED: no main window after relaunch (windows: $w)"; exit 1; fi
+if echo "$w" | grep -q 'Highball'; then record true "$w"; echo "LAUNCH WINDOW SMOKE PASSED (main window present after both relaunches)"; exit 0
+else record false "$w"; echo "LAUNCH WINDOW SMOKE FAILED: no main window after a relaunch from kept windows (windows: $w)"; exit 1; fi

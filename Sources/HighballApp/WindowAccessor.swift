@@ -37,7 +37,21 @@ enum MainWindow {
     }
 
     /// Opens the main window if none is open; a no-op when one already is.
+    ///
+    /// With no view on screen there is no opener: a session saved with only Settings open
+    /// ("Quit and Keep Windows", or any quit with "Close windows when quitting an application"
+    /// turned off) restores zero windows, SwiftUI then opens none either, and every later launch
+    /// came back with no window at all (2026-10-06, three gate runs). The main window group's
+    /// own File > New Window command opens it then, found by its ⌘N shortcut so the menu's
+    /// language does not matter.
     static func ensureOpen() {
-        if !isOpen { opener?() }
+        guard !isOpen else { return }
+        if let opener { opener(); return }
+        for menu in (NSApp.mainMenu?.items ?? []).compactMap(\.submenu) {
+            if let index = menu.items.firstIndex(where: { $0.keyEquivalent == "n" && $0.keyEquivalentModifierMask == .command }) {
+                menu.performActionForItem(at: index)
+                return
+            }
+        }
     }
 }
