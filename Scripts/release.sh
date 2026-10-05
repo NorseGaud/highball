@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # Every path below ends in a plain `git push` of the branch. On a detached HEAD that push fails
 # after the build and notarization have run (0.10.9, 2026-10-06), so say it before anything starts.
-git symbolic-ref -q HEAD >/dev/null || { echo "release.sh: HEAD is detached; check out main first (git checkout main && git pull)" >&2; exit 1; }
+git symbolic-ref -q HEAD >/dev/null || { echo "release.sh: HEAD is detached. Check out a branch that tracks origin/main first (in rel/gin-release: git checkout -B release-0.10.5 origin/main)" >&2; exit 1; }
 # Channels (2026-09-07): a normal release goes to beta first (`--beta`), then `--promote <version>`
 # turns the same signed artifact into a stable, phased rollout by editing the appcast: no rebuild,
 # so what testers ran is byte for byte what everyone gets. `--hotfix` is stable at once, no phasing.
