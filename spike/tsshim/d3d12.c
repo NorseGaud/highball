@@ -9,6 +9,15 @@
 // ResolveQueryData copies the stamps into the destination buffer through an upload ring, and
 // the queue reports the CPU clock's frequency. Everything else is D3DMetal untouched.
 //
+// Two more gaps are closed the same way (both found on D3DMetal 4.0b2 with Forza Horizon 6,
+// 2026-10-05, see the hooks for the measurements):
+// - CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL) with a shader model D3DMetal does not know
+//   returns E_INVALIDARG where a current Windows runtime answers with the highest model it
+//   supports. The hook asks again with lower values and returns that answer.
+// - ResolveSubresource from a multisampled depth texture into a colour texture ends in a Metal
+//   assertion that aborts the thread. The hook drops the call (HB_TSSHIM_DEPTHRESOLVE=1 lets it
+//   through, for a D3DMetal that has learned to do it).
+//
 // Build: x86_64-w64-mingw32-gcc -shared -O2 -Wall -static-libgcc -o d3d12.dll d3d12.c d3d12.def
 // then stamp the "Wine builtin DLL" marker so WINEDLLPATH_PREPEND picks it up.
 #define INITGUID
@@ -294,10 +303,71 @@ static void STDMETHODCALLTYPE hook_CreateDepthStencilView(ID3D12Device *dev, ID3
     if (dbg && d) LOG("DSV done res=%p", res);
 }
 
+// ---- feature queries -------------------------------------------------------------------------
+
+// A program asks for the highest shader model it understands and the runtime answers with the
+// highest one it supports at or below that. D3DMetal only accepts the values it knows (up to 0x68,
+// SM 6.8, on 4.0b2, answering 0x66) and returns E_INVALIDARG for a newer one, which a program built
+// against a newer SDK takes as "no usable shader model": Forza Horizon 6's 461.691 build asks with
+// 0x6a and stopped at "Your graphics card is not supported (FH206)" (M4, macOS 27.0, D3DMetal 4.0b2).
+// The Windows runtime the game ships knows its own enum, so on Windows the question never fails.
+static HRESULT (STDMETHODCALLTYPE *real_CheckFeatureSupport)(ID3D12Device *, D3D12_FEATURE, void *, UINT);
+static HRESULT STDMETHODCALLTYPE hook_CheckFeatureSupport(ID3D12Device *dev, D3D12_FEATURE feature, void *data, UINT size)
+{
+    HRESULT hr = real_CheckFeatureSupport(dev, feature, data, size);
+    if (feature == D3D12_FEATURE_SHADER_MODEL && hr == E_INVALIDARG && data && size >= sizeof(D3D12_FEATURE_DATA_SHADER_MODEL)) {
+        D3D12_FEATURE_DATA_SHADER_MODEL *sm = data;
+        UINT asked = sm->HighestShaderModel, v;
+        for (v = asked - 1; v >= D3D_SHADER_MODEL_6_0 && v < asked; v--) {
+            sm->HighestShaderModel = v;
+            if (SUCCEEDED(hr = real_CheckFeatureSupport(dev, feature, data, size))) break;
+        }
+        if (FAILED(hr)) sm->HighestShaderModel = asked;
+        LOG("shader model query for 0x%x answered as 0x%x (hr 0x%08lx)", asked, (unsigned)sm->HighestShaderModel, (unsigned long)hr);
+    } else if (dbg) LOG("CheckFeatureSupport feature=%d size=%u hr=0x%08lx", (int)feature, size, (unsigned long)hr);
+    return hr;
+}
+
+// ---- depth resolve ---------------------------------------------------------------------------
+
+// ResolveSubresource(colour texture, multisampled depth texture, R32_FLOAT): Windows drivers take
+// it. D3DMetal 4.0b2 builds a Metal texture view of the source in the destination's format, and
+// Metal has no cast between depth and colour formats:
+//   _mtlValidateArgumentsForTextureViewOnDevice: failed assertion `Texture Creation
+//   source texture pixelFormat (MTLPixelFormatDepth32Float) not compatible with texture view
+//   pixelFormat (MTLPixelFormatR32Float)'
+// The assertion aborts D3DMetal's thread with the game's locks held, so the game stands still for
+// good. Forza Horizon 6 issues the call every frame in its Character Select scene (960x544, 4
+// samples) and froze there on every load; with the call dropped the scene draws and the game goes
+// on (820 calls dropped in 36 s, M4, macOS 27.0). The destination keeps whatever it held, so an
+// effect that reads it may be off; nothing visible in that scene.
+static int pass_depth_resolve;
+static void (STDMETHODCALLTYPE *real_ResolveSubresource)(ID3D12GraphicsCommandList *, ID3D12Resource *, UINT, ID3D12Resource *, UINT, DXGI_FORMAT);
+static int is_depth_texture(ID3D12Resource *res, D3D12_RESOURCE_DESC *d)
+{
+    memset(d, 0, sizeof *d);
+    if (!res) return 0;
+    res->lpVtbl->GetDesc(res, d);
+    return d->Dimension != D3D12_RESOURCE_DIMENSION_BUFFER && (d->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) != 0;
+}
+static void STDMETHODCALLTYPE hook_ResolveSubresource(ID3D12GraphicsCommandList *list, ID3D12Resource *dst, UINT dst_sub, ID3D12Resource *src, UINT src_sub, DXGI_FORMAT format)
+{
+    D3D12_RESOURCE_DESC dd, sd;
+    if (!pass_depth_resolve && is_depth_texture(src, &sd) && sd.SampleDesc.Count > 1 && !is_depth_texture(dst, &dd)) {
+        static LONG told;
+        if (!InterlockedExchange(&told, 1))
+            LOG("multisampled depth resolve into a colour texture dropped (source format %u, %u samples, destination format %u %llux%u, format %u)",
+                (unsigned)sd.Format, (unsigned)sd.SampleDesc.Count, (unsigned)dd.Format, (unsigned long long)dd.Width, (unsigned)dd.Height, (unsigned)format);
+        return;
+    }
+    real_ResolveSubresource(list, dst, dst_sub, src, src_sub, format);
+}
+
 static void patch_device_vtbl(void *iface)
 {
     ID3D12DeviceVtbl *vt = *(ID3D12DeviceVtbl **)iface;
     patch_slot((void **)&vt->CreateQueryHeap, (void *)hook_CreateQueryHeap, (void **)&real_CreateQueryHeap);
+    patch_slot((void **)&vt->CheckFeatureSupport, (void *)hook_CheckFeatureSupport, (void **)&real_CheckFeatureSupport);
     if (dbg) {
         patch_slot((void **)&vt->CreateCommittedResource, (void *)hook_CreateCommittedResource, (void **)&real_CreateCommittedResource);
         patch_slot((void **)&vt->CreatePlacedResource, (void *)hook_CreatePlacedResource, (void **)&real_CreatePlacedResource);
@@ -314,6 +384,7 @@ static void patch_list_vtbl(void *iface)
     patch_slot((void **)&vt->EndQuery, (void *)hook_EndQuery, (void **)&real_EndQuery);
     patch_slot((void **)&vt->BeginQuery, (void *)hook_BeginQuery, (void **)&real_BeginQuery);
     patch_slot((void **)&vt->ResolveQueryData, (void *)hook_ResolveQueryData, (void **)&real_ResolveQueryData);
+    patch_slot((void **)&vt->ResolveSubresource, (void *)hook_ResolveSubresource, (void **)&real_ResolveSubresource);
 }
 static void patch_queue_vtbl(void *iface)
 {
@@ -405,6 +476,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
         QueryPerformanceFrequency(&f); qpc_freq = (UINT64)f.QuadPart;
         dbg = GetEnvironmentVariableA("HB_TSSHIM_DEBUG", NULL, 0) > 0;
         { char v[8]; idle = GetEnvironmentVariableA("HB_D3D12_TSSHIM", v, sizeof v) == 1 && v[0] == '0'; }   // kill switch
+        { char v[8]; pass_depth_resolve = GetEnvironmentVariableA("HB_TSSHIM_DEPTHRESOLVE", v, sizeof v) == 1 && v[0] == '1'; }
         if (!load_real()) return FALSE;
         RESOLVE(D3D12CoreCreateLayeredDevice); RESOLVE(D3D12CoreGetLayeredDeviceSize); RESOLVE(D3D12CoreRegisterLayers);
         RESOLVE(D3D12CreateRootSignatureDeserializer); RESOLVE(D3D12CreateVersionedRootSignatureDeserializer);
