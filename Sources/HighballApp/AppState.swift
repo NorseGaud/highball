@@ -869,6 +869,7 @@ final class AppState {
         runBusy(title, expected: L("usually a few minutes"),
                 done: DoneState(title: L("Engine updated"), ctaTitle: nil, cta: nil),
                 stop: .cancelTask(label: L("Stop"))) { [self] in
+            await MainActor.run { self.engineSwitchStep = .download }
             let fresh = try await engineStore.install(manifest, accepted: accepted) { name, received, total in
                 Task { @MainActor in self.reportDownload(name, received: received, total: total) }
             }
@@ -961,6 +962,7 @@ final class AppState {
     private func performMove(_ stale: Bottle, to target: InstalledEngine) async throws {
         guard var bottle = try? bottleStore.get(stale.name) else { throw HighballError.invalid("bottle '\(stale.name)' no longer exists") }
         guard bottle.settings.engineID != target.id else { return }
+        await MainActor.run { self.engineSwitchStep = .stopPrograms }
         let source = try? engineStore.engine(bottle.settings.engineID)
         if let source {
             let runnerOld = WineRunner(paths: paths, engine: source, bottle: bottle)
@@ -974,7 +976,7 @@ final class AppState {
             await MainActor.run { self.appendLog("bottle '\(bottle.name)' moved to \(target.id) (same Wine, no prefix refresh needed)") }
             return
         }
-        await MainActor.run { self.stage = String(format: L("Refreshing bottle '%@'"), bottle.name) }
+        await MainActor.run { self.stage = String(format: L("Refreshing bottle '%@'"), bottle.name); self.engineSwitchStep = .windowsSetup }
         let runner = WineRunner(paths: paths, engine: target, bottle: bottle)
         try await BottleStore.refreshPrefix(runner: runner, bottle: bottle)
         await MainActor.run { self.appendLog("bottle '\(bottle.name)' moved to \(target.id)") }
@@ -1226,6 +1228,20 @@ final class AppState {
     /// or re-runs the Windows setup without asking: the ask offers a new environment on that
     /// engine (other programs untouched) or moving this one.
     var pendingEngine: (recipe: HighballKit.Recipe, bottle: Bottle, manifest: EngineManifest)?
+    /// The page a player sees after picking another engine on an environment's page (highball#254).
+    /// Only for a switch the player started; the app's own engine questions stay as they are.
+    struct EngineTransition: Identifiable {
+        let bottleName: String
+        let targetID: String
+        var id: String { bottleName + ">" + targetID }
+    }
+    var engineTransition: EngineTransition?
+    /// The step a running switch is on, set by the move itself so the page never parses stage text.
+    var engineSwitchStep: EngineSwitchPlan.Step?
+    /// Whether the last switch the page started finished (true), failed or was stopped (false).
+    var engineSwitchSucceeded: Bool?
+    /// Debug screenshot runs: the switch page presses its own Switch button (HB_SHOW_ENGINE_SWITCH).
+    var debugStartEngineTransition = false
     /// How many other programs an environment has installed, the ones a move would carry onto the
     /// engine too: Steam games ready to play other than the recipe's own, plus added programs.
     func otherProgramCount(in bottle: Bottle, besides recipe: HighballKit.Recipe) -> Int {
@@ -2440,6 +2456,30 @@ final class AppState {
                 appendLog("\(tweak.title) is installed but its overrides could not be set: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// Starts the switch the engine page confirmed. The work is the same move as before, on the
+    /// activity strip like every long operation; the page only watches it.
+    func startEngineTransition(_ t: EngineTransition) {
+        guard !busy, let bottle = bottles.first(where: { $0.name == t.bottleName }) else { return }
+        engineSwitchStep = nil
+        engineSwitchSucceeded = nil
+        moveBottle(bottle, toEngineID: t.targetID, done: DoneState(title: L("Engine switched"), ctaTitle: nil, cta: nil))
+        // moveBottle returns at once; the outcome is read when the operation ends.
+        Task { @MainActor [weak self] in
+            while let self, self.busy { try? await Task.sleep(for: .milliseconds(300)) }
+            guard let self else { return }
+            let moved = self.bottles.first { $0.name == t.bottleName }?.settings.engineID == t.targetID
+            self.engineSwitchSucceeded = moved
+            if moved { self.engineSwitchStep = .done }
+        }
+    }
+
+    /// The programs an environment has, by name, for the switch page: Steam games ready to play,
+    /// then the programs added by hand.
+    func programNames(in bottle: Bottle) -> [String] {
+        let games = (gamesByBottle[bottle.name] ?? []).filter(\.isReady).map(\.name)
+        return games + bottle.settings.pins.map(\.name)
     }
 
     /// What the bottle's Engine picker lists: installed engines, then known ones to download.

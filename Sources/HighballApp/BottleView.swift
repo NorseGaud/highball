@@ -490,8 +490,8 @@ struct BottleSettingsSheet: View {
                             set: { newID in
                                 let current = state.bottles.first { $0.name == bottle.name } ?? bottle
                                 guard newID != current.settings.engineID else { return }
-                                dismiss()   // the move runs in the busy sheet; two sheets on one window do not stack
-                                state.moveBottle(current, toEngineID: newID)
+                                dismiss()   // the switch page opens from the main window; two sheets on one window do not stack
+                                state.engineTransition = AppState.EngineTransition(bottleName: current.name, targetID: newID)
                             })) {
                             ForEach(offered, id: \.id) { e in
                                 Text(verbatim: e.missing ? "\(e.id) (\(L("missing")))" : e.installed ? e.id : "\(e.id) (\(L("download")))").tag(e.id)

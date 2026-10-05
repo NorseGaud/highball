@@ -215,6 +215,25 @@ struct ContentView: View {
         .modesetTrialAsk(state)
         .homeMoveAsk(state)
         .sheet(isPresented: $state.showEpicSignIn) { EpicSignInSheet() }
+        .sheet(item: $state.engineTransition) { t in EngineTransitionSheet(transition: t) }
+        #if DEBUG
+        // Screenshot runs only: HB_SHOW_ENGINE_SWITCH="<environment>><engine id>" opens the switch
+        // page at launch, since a script cannot click through Settings; a trailing "!" also starts
+        // the switch, to capture the steps as they run. Compiled out of releases.
+        .task {
+            guard var spec = ProcessInfo.processInfo.environment["HB_SHOW_ENGINE_SWITCH"] else { return }
+            let start = spec.hasSuffix("!")
+            if start { spec.removeLast() }
+            guard let cut = spec.firstIndex(of: ">") else { return }
+            try? await Task.sleep(for: .seconds(4))
+            let t = AppState.EngineTransition(bottleName: String(spec[..<cut]), targetID: String(spec[spec.index(after: cut)...]))
+            state.engineTransition = t
+            if start {
+                try? await Task.sleep(for: .seconds(2))
+                state.debugStartEngineTransition = true
+            }
+        }
+        #endif
         .errorAlert(state)
         .sheet(isPresented: Binding(get: { state.showErrorDetails }, set: { state.showErrorDetails = $0 })) {
             ErrorDetailsSheet(text: state.errorDetailsText)
