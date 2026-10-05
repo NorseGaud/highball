@@ -191,6 +191,25 @@ final class RecipeEngineTests: XCTestCase {
         XCTAssertNil(ea.engineToOffer(current: wine11, known: [def, wine11]))
     }
 
+    /// Forza Horizon 6 needs the Wine 11 tree and D3DMetal 4: its recipe names r19, the app ships
+    /// that manifest, Play on the default engine offers it on macOS 27, and a later Wine 11
+    /// revision without D3DMetal 4 never passes for it.
+    func testTheForzaHorizon6RecipeNamesTheBundledWine11EngineWithD3DMetal4() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let recipeURL = root.deletingLastPathComponent().appending(path: "highball-db/recipes/games/forza-horizon-6.json")
+        guard FileManager.default.fileExists(atPath: recipeURL.path) else { throw XCTSkip("no forza-horizon-6 recipe in the highball-db checkout") }
+        let fh6 = try Recipe.load(from: recipeURL)
+        let named = try XCTUnwrap(fh6.engine, "the Forza Horizon 6 recipe names no engine")
+        let pinned = try EngineManifest.load(from: root.appending(path: "spike/engines/\(named).json"))
+        XCTAssertNotNil(pinned.components["d3dmetal"], "\(named) must carry D3DMetal 4")
+        XCTAssertEqual(pinned.minMacOS, "27.0")
+        let def = try EngineManifest.load(from: root.appending(path: "spike/engine-manifest.json"))
+        let r19 = try EngineManifest.load(from: root.appending(path: "spike/engines/x64-crossover26.3-r19.json"))
+        XCTAssertEqual(fh6.engineToOffer(current: def, known: [def, r19, pinned], macOS: "27.0")?.id, named)
+        XCTAssertEqual(fh6.engineToOffer(current: r19, known: [def, r19, pinned], macOS: "27.0")?.id, named, "r19 lacks D3DMetal 4")
+        XCTAssertNil(fh6.engineToOffer(current: pinned, known: [def, r19, pinned], macOS: "27.0"))
+    }
+
     func testFreeBottleName() {
         XCTAssertEqual(BottleStore.freeName("EA app", taken: []), "EA app")
         XCTAssertEqual(BottleStore.freeName("EA app", taken: ["EA app"]), "EA app 2")

@@ -38,6 +38,41 @@ final class BundledEngineTests: XCTestCase {
         XCTAssertEqual(d3dmetal.license, "apple-gptk-license-2023-08-17", "same licence text as GPTK 3, same gate")
     }
 
+    /// r19 is r17 with a rebuilt Wine (patches 0017 to 0019) and the new shim; r18 is the same
+    /// plus D3DMetal 4 for the games that need it (Forza Horizon 6), numbered below on purpose,
+    /// like the Wine 10 line's r20 under r21: a recipe pinning an earlier Wine 11 revision is
+    /// offered the newest revision carrying its pin, which must stay a D3DMetal 3 one, so the
+    /// verified D3DMetal games on that line (Guardians, Persona 5 Royal...) keep their D3DMetal.
+    func testR19IsR17WithTheNewWineAndShimAndR18AddsOnlyD3DMetal4() throws {
+        let all = try manifests()
+        func one(_ id: String) throws -> EngineManifest { try XCTUnwrap(all.first { $0.id == id }, "\(id) missing") }
+        let r17 = try one("x64-crossover26.3-r17"), r18 = try one("x64-crossover26.3-r18"), r19 = try one("x64-crossover26.3-r19")
+        XCTAssertEqual(r19.minMacOS, r17.minMacOS, "r19 must keep r17's floor")
+        XCTAssertEqual(Set(r19.components.keys), Set(r17.components.keys))
+        for (name, c) in r17.components where name != "wine" && name != "d3dmetal-tsshim" {
+            XCTAssertEqual(r19.components[name]?.sha256, c.sha256, "\(name) drifted from r17, so its download is not reused")
+        }
+        XCTAssertNotEqual(r19.components["wine"]?.sha256, r17.components["wine"]?.sha256, "r19 carries the rebuilt Wine")
+        for (name, c) in r19.components {
+            XCTAssertEqual(r18.components[name]?.sha256, c.sha256, "r18 must carry r19's \(name) unchanged")
+        }
+        XCTAssertEqual(Set(r18.components.keys), Set(r19.components.keys).union(["d3dmetal"]))
+        XCTAssertEqual(r18.minMacOS, "27.0")
+        XCTAssertFalse(r18.runs(onMacOS: "26.6.2"), "D3DMetal 4 is measured on macOS 27 only")
+        XCTAssertEqual(r18.baseEnv?["D3DM_MTL4"], "0", "the Metal 4 backend ends UE5 titles within a minute on 4.0b2")
+        XCTAssertEqual(r18.components["d3dmetal"]?.sha256, try one("x64-sikarugir10.0_6-r20").components["d3dmetal"]?.sha256,
+                       "the same D3DMetal 4 component as the Wine 10 line, downloaded once")
+        XCTAssertFalse(EngineManifest.satisfies(current: r19, wanted: r18), "r19 lacks D3DMetal 4")
+        XCTAssertFalse(EngineManifest.needsPrefixRefresh(from: r19, to: r18), "same Wine: moving between the two is cheap")
+        // Every Wine 11 pin that predates these two is offered r19 on macOS 27, never r18.
+        for pin in ["x64-crossover26.3-r5", "x64-crossover26.3-r7", "x64-crossover26.3-r8", "x64-crossover26.3-r9", "x64-crossover26.3-r15"] {
+            let wanted = try one(pin)
+            let offered = all.filter { EngineManifest.satisfies(current: $0, wanted: wanted) && $0.runs(onMacOS: "27.0") }
+                .max { (EngineManifest.revision(of: $0.id) ?? 0) < (EngineManifest.revision(of: $1.id) ?? 0) }
+            XCTAssertEqual(offered?.id, r19.id, "a pin on \(pin) must get the D3DMetal 3 revision")
+        }
+    }
+
     /// Frame generation left Highball on 2026-09-27 at its author's request (itsOwen's lsfg-metal,
     /// highball#171): no engine may ship the component any more. The revisions since are their
     /// bases (r5 on the main line, r6 on the GPTK 4 line) with DXMT swapped and one file added.
