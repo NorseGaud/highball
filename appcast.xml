@@ -5,6 +5,14 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.10.8</title>
+      <description><![CDATA[The EA app installs on the Wine 11 engine, switching an environment's engine shows what moves and the steps, ContractVille passes -dx11, the day's M4 checks in the database]]></description>
+      <pubDate>Mon, 05 Oct 2026 16:31:33 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.8/Highball-0.10.8.zip" sparkle:version="0.10.8" sparkle:shortVersionString="0.10.8" sparkle:edSignature="8bwRl4ukTPWnB5yC58jXaLaRTlrQVRP+EB15WBdkqjzTzk0QLwrmbnM5HTlr4czyKpl5EmgFCB2FXWcnVpkHAg==" length="4432964" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.10.7</title>
       <description><![CDATA[A symlinked Steam library lists its games, the database in the app is current again, covers and names survive an environment rename, the engine question warns that a move carries every game, Bloody Spell and Overwatch 2 recipes, seven new games]]></description>
       <pubDate>Mon, 05 Oct 2026 11:38:14 +0200</pubDate>
