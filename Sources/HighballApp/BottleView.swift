@@ -54,6 +54,9 @@ struct BottleView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 34) {
                 HStack(spacing: 12) {
+                    Button { dismiss() } label: {
+                        Label(L("Back"), systemImage: "chevron.left")
+                    }
                     Button {
                         navigationPath.append(EnvironmentSettingsDestination(name: bottle.name))
                     } label: { Label(L("Environment settings"), systemImage: "slider.horizontal.3") }
@@ -84,6 +87,7 @@ struct BottleView: View {
         .background(BottleBackdrop())
         .navigationTitle(bottle.name)
         .navigationSubtitle(engine?.displayName ?? "")
+        .navigationBarBackButtonHidden()
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 if navigationPath.count == 1 {
@@ -289,6 +293,8 @@ struct EnvironmentSettingsPage: View {
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
     let bottle: Bottle
+    // Settings' TabView owns the window toolbar; its generated navigation arrow does not pop.
+    var showsInlineBack = false
     @State private var selectedSection: EnvironmentSettingsSection = .graphics
     @State private var confirmDelete = false
     @State private var showFrameGenInfo = false
@@ -317,6 +323,11 @@ struct EnvironmentSettingsPage: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
+                if showsInlineBack {
+                    Button { dismiss() } label: {
+                        Label(L("Back"), systemImage: "chevron.left")
+                    }
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(bottle.name).font(.title2.bold())
                     Text(engine?.displayName ?? "").font(.caption).foregroundStyle(.secondary)
@@ -590,6 +601,7 @@ struct EnvironmentSettingsPage: View {
             .formStyle(.grouped)
         }
         .navigationTitle(L("Environment settings"))
+        .navigationBarBackButtonHidden(showsInlineBack)
         .background { PageCancelShortcut { dismiss() } }
         .confirmationDialog(UserFolders.hasFilesInside(driveC: bottle.driveC)
                             ? L("Delete this environment? Its Windows drive and everything installed in it are removed, including the game saves kept in its Documents folder.")

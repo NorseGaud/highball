@@ -9,6 +9,7 @@ func L(_ en: String) -> String {
 
 enum L10n {
     static let fr: [String: String] = [
+        "Back": "Retour",
         "Display": "Affichage",
         "Changes save automatically": "Les modifications sont enregistrées automatiquement",
         "Choose a store or a Windows program you already have.": "Choisissez une boutique ou un programme Windows que vous possédez déjà.",

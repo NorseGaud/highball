@@ -131,7 +131,7 @@ struct EnvironmentsPane: View {
             }
             .navigationDestination(for: EnvironmentSettingsDestination.self) { destination in
                 if let bottle = state.bottles.first(where: { $0.name == destination.name }) {
-                    EnvironmentSettingsPage(bottle: bottle)
+                    EnvironmentSettingsPage(bottle: bottle, showsInlineBack: true)
                 }
             }
             .sheet(isPresented: $showCreate) { CreateBottleSheet() }
