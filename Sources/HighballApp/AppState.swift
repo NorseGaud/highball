@@ -249,7 +249,7 @@ final class AppState {
         libraryItems = LibraryIndex.build(bottles: bottles, steamByBottle: gamesByBottle,
                                           steamOwnedByBottle: steamOwnedByBottle, macInstalled: macSteamGames,
                                           epicOwned: epicOwned, epicInstalls: epicInstalls,
-                                          plays: libraryPlays)
+                                          plays: libraryPlays, defaultBottle: defaultBottle?.name)
         sortLibraryByDisplayTitle()
         if let deferred = deferredPlayLink { resolvePlayLink(deferred.request) }
         refreshMacFlags()
@@ -445,7 +445,7 @@ final class AppState {
             // used to auto-apply on r5 and launch there, so nobody was ever offered the engine
             // the game was verified on (Red Dead's and CS:GO's case).
             if let wanted = recipe.engineToOffer(current: engine.manifest, known: Self.knownManifests) {
-                pendingEngine = (recipe, bottle, wanted)
+                pendingEngine = (recipe, bottle, wanted, item, environmentFit(for: recipe, besides: bottle, item: item))
                 return
             }
             if let missing = recipe.engineUnknown(current: engine.manifest, known: Self.knownManifests) {
@@ -1228,7 +1228,10 @@ final class AppState {
     /// about to be installed into an environment on a different Wine build. Nothing downloads
     /// or re-runs the Windows setup without asking: the ask offers a new environment on that
     /// engine (other programs untouched) or moving this one.
-    var pendingEngine: (recipe: HighballKit.Recipe, bottle: Bottle, manifest: EngineManifest)?
+    /// `item` is the game Play was starting, nil when a fix's own button asked. `fit` is an
+    /// environment already on the right engine that the ask offers first, worked out when the
+    /// ask is raised: reading engines from disk inside the alert kept it from ever showing.
+    var pendingEngine: (recipe: HighballKit.Recipe, bottle: Bottle, manifest: EngineManifest, item: LibraryItem?, fit: Bottle?)?
     /// The page a player sees after picking another engine on an environment's page (highball#254).
     /// Only for a switch the player started; the app's own engine questions stay as they are.
     struct EngineTransition: Identifiable {
@@ -1258,15 +1261,25 @@ final class AppState {
     var pendingUpdate: (recipe: HighballKit.Recipe, engineID: String, play: (item: LibraryItem, bottle: Bottle, renderer: Renderer?)?)?
 
     /// The ask's first way out: a new environment on the engine the recipe names, the recipe
-    /// applied; the engine downloads first when it is not installed.
-    func createEnvironment(for recipe: HighballKit.Recipe, on manifest: EngineManifest) {
+    /// applied; the engine downloads first when it is not installed. A new environment starts
+    /// without the game, so for a Steam game the done row's button hands it to that environment's
+    /// Steam (highball-db#318: the row said "installed" and nothing said what came next).
+    func createEnvironment(for recipe: HighballKit.Recipe, on manifest: EngineManifest, item: LibraryItem? = nil) {
         pendingEngine = nil
         guard !busy else { return }
         let name = BottleStore.freeName(recipe.title, taken: Set(bottles.map(\.name)))
         let accepted = Set(engines.flatMap { $0.manifest.acceptedLicenses ?? [] })
+        let done: DoneState
+        if let item, item.source == .steam {
+            done = DoneState(title: String(format: L("The %@ environment is ready"), name),
+                             ctaTitle: String(format: L("Install %@"), displayTitle(item)),
+                             cta: { [weak self] in self?.installSteamGame(item.homed(in: name)) })
+        } else {
+            done = DoneState(title: String(format: L("%@ installed"), recipe.title), ctaTitle: nil, cta: nil)
+        }
         runBusy(String(format: L("Creating the %@ environment on %@"), name, GamePageCopy.shortEngineName(manifest)),
                 expected: L("a download when the engine is new, then a first boot of about 90 seconds"),
-                done: DoneState(title: String(format: L("%@ installed"), recipe.title), ctaTitle: nil, cta: nil),
+                done: done,
                 stop: .cancelTask(label: L("Stop"))) { [self] in
             let engine: InstalledEngine
             if let installed = engines.first(where: { $0.id == manifest.id }) {
@@ -1294,6 +1307,43 @@ final class AppState {
         guard let play = pending.play else { return }
         appendLog("\(play.item.title): its fix needs the \(pending.engineID) engine, which this Highball does not ship; playing without it.")
         launch(play.item, in: play.bottle, renderer: play.renderer)
+    }
+
+    /// An environment, other than the one Play started from, already on an engine the recipe
+    /// accepts: the one the ask's "New environment" made, or one the player moved there. Offered
+    /// first by the ask, so pressing Play again never makes a second environment (highball-db#318).
+    /// Only for a game Play can reach there: one installed there, or a Steam game its Steam can install.
+    func environmentFit(for recipe: HighballKit.Recipe, besides bottle: Bottle, item: LibraryItem?) -> Bottle? {
+        guard let item else { return nil }
+        let candidates = bottles.filter { b in
+            b.name != bottle.name && !deletingBottles.contains(b.name)
+                && engine(for: b).map { recipe.engineToOffer(current: $0.manifest, known: Self.knownManifests) == nil } == true
+                && (item.otherBottles.contains(b.name) || item.source == .steam)
+        }.map { b in
+            EnvironmentFit.Candidate(name: b.name, holdsGame: item.otherBottles.contains(b.name),
+                                     hasFix: b.settings.recipes.contains(recipe.id))
+        }
+        return EnvironmentFit.best(candidates).flatMap { c in bottles.first { $0.name == c.name } }
+    }
+
+    /// The ask's way out through an environment that already fits: the fix goes in first when it
+    /// is missing (for Mirror's Edge Catalyst that is the EA app), then the game plays there, or
+    /// that environment's Steam is asked to install it.
+    func useEnvironment(_ env: Bottle, for recipe: HighballKit.Recipe, item: LibraryItem) {
+        pendingEngine = nil
+        let target = item.homed(in: env.name)
+        let next: () -> Void = { [weak self] in
+            guard let self else { return }
+            if target.installed { self.play(target) } else { self.installSteamGame(target) }
+        }
+        if !env.settings.recipes.contains(recipe.id) || !recipe.artifactsPresent(driveC: env.driveC) {
+            applyRecipe(recipe.id, to: env, then: DoneState(
+                title: String(format: L("%@ installed"), recipe.title),
+                ctaTitle: String(format: target.installed ? L("Play %@") : L("Install %@"), displayTitle(item)),
+                cta: next))
+        } else {
+            next()
+        }
     }
 
     /// The ask's second way out: move the environment itself (the Windows setup re-runs, nothing
@@ -1353,7 +1403,7 @@ final class AppState {
     func applyRecipe(_ id: String, to bottle: Bottle, then done: DoneState? = nil) {
         guard let engine = engine(for: bottle), let recipe = Self.recipe(id) else { return }
         if let wanted = recipe.engineToOffer(current: engine.manifest, known: Self.knownManifests) {
-            pendingEngine = (recipe, bottle, wanted); return
+            pendingEngine = (recipe, bottle, wanted, nil, nil); return
         }
         if let missing = recipe.engineUnknown(current: engine.manifest, known: Self.knownManifests) {
             pendingUpdate = (recipe, missing, nil); return

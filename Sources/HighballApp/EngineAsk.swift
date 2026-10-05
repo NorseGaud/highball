@@ -23,7 +23,17 @@ extension GamePageCopy {
     /// `others` is how many other programs the environment has installed (Steam games and added
     /// programs): moving the environment moves them all onto the engine, which a player found out
     /// the hard way when an old revision could not show Steam's window (highball#262).
-    static func engineAsk(recipe: HighballKit.Recipe, manifest: EngineManifest, installed: Bool, others: Int) -> String {
+    /// `existing` names an environment already on that engine and whether the game is installed
+    /// in it; the ask then offers it first (highball-db#318).
+    static func engineAsk(recipe: HighballKit.Recipe, manifest: EngineManifest, installed: Bool, others: Int,
+                          existing: (name: String, holdsGame: Bool)? = nil) -> String {
+        guard let existing else { return engineAskBody(recipe: recipe, manifest: manifest, installed: installed, others: others) }
+        return existing.holdsGame
+            ? String(format: L("'%@' is already on the %@ engine and has the game installed, so it plays there. This environment stays as it is."), existing.name, shortEngineName(manifest))
+            : String(format: L("'%@' is already on the %@ engine. Using it installs the game there, with what it needs, and this environment stays as it is."), existing.name, shortEngineName(manifest))
+    }
+
+    private static func engineAskBody(recipe: HighballKit.Recipe, manifest: EngineManifest, installed: Bool, others: Int) -> String {
         let download = installed ? "" : String(format: L(", after a download of about %@"), downloadSize(manifest))
         if others == 0 {
             return String(format: L("%@ is verified on the %@ engine, and this environment is not on it. Moving this environment switches it there%@ and keeps everything installed; the Windows setup re-runs when needed, a minute or two. A new environment starts empty, so the game has to be installed again."),

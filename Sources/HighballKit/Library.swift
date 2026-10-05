@@ -47,6 +47,20 @@ public struct LibraryItem: Identifiable, Sendable, Hashable {
 
     /// Playable here in either build: the Windows one in a bottle or the Mac one in Steam for Mac.
     public var installedAnywhere: Bool { installed || installedOnMac }
+
+    /// The same game seen from another environment: the library shows one tile per Steam game,
+    /// homed where it was last played (highball#264), and this is how Play reaches a copy in one
+    /// of the others, or how Install hands the game to that environment's Steam. Installed when
+    /// that environment holds a copy.
+    public func homed(in bottle: String) -> LibraryItem {
+        guard bottle != bottleName else { return self }
+        let holds = otherBottles.contains(bottle)
+        let others = (otherBottles.filter { $0 != bottle } + (installed ? [bottleName].compactMap { $0 } : [])).sorted()
+        return LibraryItem(source: source, id: id, title: title, bottleName: bottle, installed: holds,
+                           installedOnMac: installedOnMac, steamAppID: steamAppID, epicAppName: epicAppName,
+                           pinID: pinID, artworkTall: artworkTall, artworkWide: artworkWide,
+                           otherBottles: others, sizeOnDisk: holds ? 0 : sizeOnDisk, lastPlayed: lastPlayed)
+    }
 }
 
 public enum LibraryIndex {
@@ -87,10 +101,18 @@ public enum LibraryIndex {
                              macInstalled: [SteamGame] = [],
                              epicOwned: [EpicStore.Game],
                              epicInstalls: [String: String],
-                             plays: [String: LibraryStore.PlayRecord] = [:]) -> [LibraryItem] {
+                             plays: [String: LibraryStore.PlayRecord] = [:],
+                             defaultBottle: String? = nil) -> [LibraryItem] {
         var items: [LibraryItem] = []
         let onMac = Dictionary(macInstalled.map { ($0.appid, $0) }, uniquingKeysWith: { a, _ in a })
-        let firstBottle = bottles.map(\.name).min { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        // Where a game with no other reason to live somewhere goes: the default environment first,
+        // then by name. By name alone, a test environment called "Clean" took every owned game
+        // from "Games" (highball#264).
+        func before(_ a: String, _ b: String) -> Bool {
+            if let d = defaultBottle, (a == d) != (b == d) { return a == d }
+            return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+        }
+        let firstBottle = bottles.map(\.name).min(by: before)
 
         // Steam: group by appid, pick a primary copy, remember the others.
         var byAppID: [Int: [(bottle: String, game: SteamGame)]] = [:]
@@ -105,7 +127,7 @@ public enum LibraryIndex {
             let primary = copies.min { a, b in
                 if let lp = lastPlayedBottle, (a.bottle == lp) != (b.bottle == lp) { return a.bottle == lp }
                 if a.game.isReady != b.game.isReady { return a.game.isReady }
-                return a.bottle.localizedCaseInsensitiveCompare(b.bottle) == .orderedAscending
+                return before(a.bottle, b.bottle)
             }!
             let acfPlayed = (copies.compactMap(\.game.lastPlayed) + [onMac[appid]?.lastPlayed].compactMap { $0 }).max()
             let recorded = plays[id]?.lastPlayedAt
@@ -122,9 +144,9 @@ public enum LibraryIndex {
         }
 
         // Steam games owned but not installed: one tile each, like Epic's, in the first bottle
-        // (by name) whose client lists them, where Install will hand them to Steam.
+        // (the default, then by name) whose client lists them, where Install will hand them to Steam.
         var ownedOnly = Set<Int>()
-        for bottle in bottles.sorted(by: { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) {
+        for bottle in bottles.sorted(by: { before($0.name, $1.name) }) {
             for game in steamOwnedByBottle[bottle.name] ?? [] where byAppID[game.appid] == nil && !ownedOnly.contains(game.appid) {
                 ownedOnly.insert(game.appid)
                 let id = "steam:\(game.appid)"
@@ -173,6 +195,40 @@ public enum LibraryIndex {
         }
 
         return items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    /// What an environment holds, for its card in Settings: every Steam game installed in it,
+    /// whether or not the library homes that game's tile there (one tile per game, highball#264),
+    /// plus the programs and Epic games that live in it. Games the account owns but has not
+    /// installed are not in any environment, so they are not counted.
+    public static func footprint(of bottle: String, items: [LibraryItem], steamGames: [SteamGame]) -> (count: Int, bytes: Int64) {
+        let steam = steamGames.filter(\.isReady)
+        let others = items.filter { $0.source != .steam && $0.bottleName == bottle && $0.installed }
+        return (steam.count + others.count,
+                steam.reduce(Int64(0)) { $0 + $1.sizeOnDisk } + others.reduce(Int64(0)) { $0 + $1.sizeOnDisk })
+    }
+}
+
+/// Which existing environment a game that needs another engine should use (highball-db#318).
+/// The engine ask offers the best one before "New environment", so pressing Play again after
+/// making one never makes a second. An environment holding the game comes first, then one
+/// with the game's fix applied, then any other on an engine the fix accepts.
+public enum EnvironmentFit {
+    public struct Candidate: Equatable, Sendable {
+        public let name: String
+        public let holdsGame: Bool
+        public let hasFix: Bool
+        public init(name: String, holdsGame: Bool, hasFix: Bool) {
+            self.name = name; self.holdsGame = holdsGame; self.hasFix = hasFix
+        }
+    }
+
+    /// `candidates` are already on an engine the fix accepts, in the order the app lists them.
+    public static func best(_ candidates: [Candidate]) -> Candidate? {
+        func rank(_ c: Candidate) -> Int { c.holdsGame ? 0 : (c.hasFix ? 1 : 2) }
+        return candidates.enumerated().min { a, b in
+            rank(a.element) != rank(b.element) ? rank(a.element) < rank(b.element) : a.offset < b.offset
+        }?.element
     }
 }
 

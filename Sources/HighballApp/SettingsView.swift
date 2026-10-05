@@ -141,14 +141,19 @@ struct EnvironmentsPane: View {
         }
     }
 
+    /// Every game installed in the environment, also one whose tile lives in another (highball#264).
+    private func footprint(_ bottle: Bottle) -> (count: Int, bytes: Int64) {
+        LibraryIndex.footprint(of: bottle.name, items: state.libraryItems, steamGames: state.gamesByBottle[bottle.name] ?? [])
+    }
+
     private func sizeText(_ bottle: Bottle) -> String {
-        let bytes = state.libraryItems.filter { $0.bottleName == bottle.name }.reduce(Int64(0)) { $0 + $1.sizeOnDisk }
+        let bytes = footprint(bottle).bytes
         return bytes > 0 ? ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) : ""
     }
 
     private func environmentCard(_ bottle: Bottle) -> some View {
         let isSelected = selected?.name == bottle.name
-        let titles = state.libraryItems.filter { $0.bottleName == bottle.name }.count
+        let titles = footprint(bottle).count
         return Button {
             selectedName = bottle.name
         } label: {
@@ -166,7 +171,7 @@ struct EnvironmentsPane: View {
                         }
                     }
                     Text([state.engine(for: bottle)?.displayName ?? bottle.settings.engineID,
-                          String(format: L("%d titles"), titles),
+                          String(format: L("%d installed"), titles),
                           sizeText(bottle)].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }

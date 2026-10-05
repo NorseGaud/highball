@@ -362,8 +362,14 @@ struct GameDetailView: View {
                             Text(bottle.name).font(.callout)
                             Button(L("Environment settings…")) { showBottleSettings = true }.controlSize(.small)
                         }
-                        if !item.otherBottles.isEmpty {
-                            row(L("Also installed in"), item.otherBottles.joined(separator: ", "))
+                        // Another copy plays from its own environment; once played there, the
+                        // tile follows it (highball#264).
+                        ForEach(item.otherBottles, id: \.self) { other in
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text(L("Also installed in")).font(.caption).foregroundStyle(.secondary).frame(width: 110, alignment: .leading)
+                                Text(other).font(.callout)
+                                Button(L("Play there")) { state.play(item.homed(in: other)) }.controlSize(.small)
+                            }
                         }
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(L("Files")).font(.caption).foregroundStyle(.secondary).frame(width: 110, alignment: .leading)

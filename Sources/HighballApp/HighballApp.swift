@@ -238,6 +238,30 @@ struct ContentView: View {
                 state.debugStartEngineTransition = true
             }
         }
+        // HB_DEBUG_RUN="<environment>|<path to an .exe>" runs it as a drop on the environment
+        // would, so a script can see where its window opens. On an M4 with macOS 27 (2026-10-05)
+        // Notepad on both engines and Steam's sign-in on Wine 11 came to the front by themselves
+        // when Highball started them; Steam's stayed behind only while a macOS prompt held the front.
+        .task {
+            guard let spec = ProcessInfo.processInfo.environment["HB_DEBUG_RUN"],
+                  let cut = spec.firstIndex(of: "|") else { return }
+            try? await Task.sleep(for: .seconds(4))
+            guard let bottle = state.bottles.first(where: { $0.name == String(spec[..<cut]) }) else { return }
+            state.runDropped(URL(fileURLWithPath: String(spec[spec.index(after: cut)...])), in: bottle, andPin: false)
+        }
+        // HB_DEBUG_PLAY="<library item id>" presses Play on that tile, so a script can capture
+        // the questions Play asks (the engine ask, highball-db#318).
+        .task {
+            guard let id = ProcessInfo.processInfo.environment["HB_DEBUG_PLAY"] else { return }
+            for _ in 0..<30 {
+                try? await Task.sleep(for: .seconds(1))
+                guard let item = state.libraryItems.first(where: { $0.id == id }) else { continue }
+                state.play(item)
+                debugNote(state.paths.logs, "HB_DEBUG_PLAY \(id) in \(item.bottleName ?? "-"): engine ask \(state.pendingEngine.map { "for \($0.manifest.id)" } ?? "not raised")")
+                return
+            }
+            debugNote(state.paths.logs, "HB_DEBUG_PLAY \(id): no such tile among \(state.libraryItems.count)")
+        }
         #endif
         .errorAlert(state)
         .sheet(isPresented: Binding(get: { state.showErrorDetails }, set: { state.showErrorDetails = $0 })) {
@@ -348,19 +372,27 @@ private extension View {
                isPresented: .init(get: { state.pendingEngine != nil }, set: { if !$0 { state.pendingEngine = nil } }),
                presenting: state.pendingEngine) { pending in
             // With other programs installed here, a new environment is the safe choice and comes
-            // first (highball#262); for an environment holding only this game, moving it is.
+            // first (highball#262); for an environment holding only this game, moving it is. An
+            // environment already on that engine comes before both and replaces the move: Play
+            // again after "New environment" must not make a second one (highball-db#318).
             let others = state.otherProgramCount(in: pending.bottle, besides: pending.recipe)
-            if others > 0 {
-                Button(String(format: L("New environment for %@"), pending.recipe.title)) { state.createEnvironment(for: pending.recipe, on: pending.manifest) }
+            if let fit = pending.fit, let item = pending.item {
+                Button(String(format: L("Use '%@'"), fit.name)) { state.useEnvironment(fit, for: pending.recipe, item: item) }
+                Button(String(format: L("New environment for %@"), pending.recipe.title)) { state.createEnvironment(for: pending.recipe, on: pending.manifest, item: pending.item) }
+                Button(L("Not now"), role: .cancel) { state.pendingEngine = nil }
+            } else if others > 0 {
+                Button(String(format: L("New environment for %@"), pending.recipe.title)) { state.createEnvironment(for: pending.recipe, on: pending.manifest, item: pending.item) }
                 Button(L("Move this environment")) { state.moveEnvironment(for: pending.recipe, bottle: pending.bottle, to: pending.manifest) }
+                Button(L("Not now"), role: .cancel) { state.pendingEngine = nil }
             } else {
                 Button(L("Move this environment")) { state.moveEnvironment(for: pending.recipe, bottle: pending.bottle, to: pending.manifest) }
-                Button(String(format: L("New environment for %@"), pending.recipe.title)) { state.createEnvironment(for: pending.recipe, on: pending.manifest) }
+                Button(String(format: L("New environment for %@"), pending.recipe.title)) { state.createEnvironment(for: pending.recipe, on: pending.manifest, item: pending.item) }
+                Button(L("Not now"), role: .cancel) { state.pendingEngine = nil }
             }
-            Button(L("Not now"), role: .cancel) { state.pendingEngine = nil }
         } message: { pending in
             Text(GamePageCopy.engineAsk(recipe: pending.recipe, manifest: pending.manifest, installed: state.engines.contains { $0.id == pending.manifest.id },
-                                        others: state.otherProgramCount(in: pending.bottle, besides: pending.recipe)))
+                                        others: state.otherProgramCount(in: pending.bottle, besides: pending.recipe),
+                                        existing: pending.fit.map { ($0.name, pending.item?.otherBottles.contains($0.name) == true) }))
         }
     }
     @MainActor func updateAsk(_ state: AppState) -> some View {
@@ -623,3 +655,13 @@ struct ErrorDetailsSheet: View {
         .frame(minWidth: 520, minHeight: 320)
     }
 }
+
+#if DEBUG
+/// One line for a script driving a debug build, in Highball's logs folder.
+@MainActor func debugNote(_ logs: URL, _ line: String) {
+    let url = logs.appending(path: "debug-hooks.txt")
+    let text = "\(Date()) \(line)\n"
+    if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data(text.utf8)); try? h.close() }
+    else { try? text.write(to: url, atomically: true, encoding: .utf8) }
+}
+#endif
