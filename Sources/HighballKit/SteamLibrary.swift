@@ -58,7 +58,10 @@ public enum SteamLibrary {
     static func games(steamRoot root: URL, bottleURL: URL) -> [SteamGame] {
         var seen = Set<Int>(), games: [SteamGame] = []
         for library in libraryFolders(steamRoot: root, bottleURL: bottleURL) {
-            let steamapps = library.appending(path: "steamapps")
+            // Resolved first: players move steamapps to an external disk and leave a symlink in its
+            // place, and FileManager's URL listing refuses a symlink ("Not a directory"), so the
+            // whole library read as empty (highball-db#316, steamapps on /Volumes/MEDIA_DEV).
+            let steamapps = library.appending(path: "steamapps").resolvingSymlinksInPath()
             guard let entries = try? FileManager.default.contentsOfDirectory(at: steamapps, includingPropertiesForKeys: nil) else { continue }
             for url in entries where url.lastPathComponent.hasPrefix("appmanifest_") && url.pathExtension == "acf" {
                 guard let game = parseManifest(url, libraryRoot: library),

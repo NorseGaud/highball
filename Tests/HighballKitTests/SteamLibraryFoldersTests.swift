@@ -65,6 +65,22 @@ final class SteamLibraryFoldersTests: XCTestCase {
                        external.appending(path: "steamapps/common/BloodySpell").standardizedFileURL.path)
     }
 
+    func testASymlinkedSteamappsFolderIsRead() throws {
+        // highball-db#316: steamapps moved to an external disk with a symlink left in its place.
+        let bottle = tmp.appending(path: "bottle", directoryHint: .isDirectory)
+        let steam = bottle.appending(path: "drive_c/Program Files (x86)/Steam", directoryHint: .isDirectory)
+        let external = tmp.appending(path: "MEDIA_DEV/roms/steam/steamapps", directoryHint: .isDirectory)
+        try write("", to: steam.appending(path: "steam.exe"))
+        try write(manifest(992300, "Bloody Spell", dir: "BloodySpell"), to: external.appending(path: "appmanifest_992300.acf"))
+        try write("", to: external.appending(path: "common/BloodySpell/BloodySpell.exe"))
+        try FileManager.default.createSymbolicLink(atPath: steam.appending(path: "steamapps").path, withDestinationPath: external.path)
+
+        let games = SteamLibrary.games(steamRoot: steam, bottleURL: bottle)
+        XCTAssertEqual(games.map(\.appid), [992300], "a symlinked steamapps must list its manifests")
+        XCTAssertEqual(games.first?.installFolder?.resolvingSymlinksInPath().path,
+                       external.appending(path: "common/BloodySpell").resolvingSymlinksInPath().path)
+    }
+
     func testWindowsPathsGoThroughTheBottlesDriveLetters() throws {
         let bottle = tmp.appending(path: "b", directoryHint: .isDirectory)
         XCTAssertEqual(SteamLibrary.unixURL(windowsPath: "C:\\Games\\X", bottleURL: bottle)?.standardizedFileURL.path,

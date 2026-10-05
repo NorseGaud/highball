@@ -42,7 +42,8 @@ public enum MacSteam {
         var seen = Set<Int>()
         return steamappsDirectories(root: root)
             .flatMap { dir in
-                ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+                // Resolved first, as SteamLibrary.games does: a symlinked steamapps lists as nothing.
+                ((try? FileManager.default.contentsOfDirectory(at: dir.resolvingSymlinksInPath(), includingPropertiesForKeys: nil)) ?? [])
                     .filter { $0.lastPathComponent.hasPrefix("appmanifest_") && $0.pathExtension == "acf" }
             }
             .compactMap { SteamLibrary.parseManifest($0) }
