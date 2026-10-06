@@ -113,6 +113,10 @@ spike/tools/build-cabextract.sh >/dev/null 2>&1 || { echo "error: could not buil
 mkdir -p "$APP/Contents/Resources/tools"
 cp spike/tools/cabextract "$APP/Contents/Resources/tools/cabextract"
 cp spike/tools/cabextract.LICENSE "$APP/Contents/Resources/tools/cabextract.LICENSE"
+# A stand-in for `lipo -archs`, which winetricks asks which Wine it runs: macOS's own lipo needs
+# Xcode's tools and an accepted Xcode licence, and without them the core fonts step failed
+# (highball#135, #183). A shell script reading the Mach-O header; the bundle's seal covers it.
+cp spike/tools/lipo "$APP/Contents/Resources/tools/lipo"
 # The EpicGamesLauncher.exe stand-in for Rockstar games bought on Epic (highball#93), built from
 # spike/epic-stub/EpicGamesLauncher.c with mingw. A release must carry it; a debug build without
 # mingw goes on without it and the Epic launch path says so in the log.
@@ -229,7 +233,7 @@ if [ -n "$IDENTITY" ]; then
   # Bundled command-line tools are Mach-O executables too: notarization rejects them unsigned
   # (cabextract, 2026-09-14: "not signed with a valid Developer ID", no hardened runtime).
   for tool in "$APP"/Contents/Resources/tools/*; do
-    case "$tool" in *.LICENSE) ;; *) codesign --force --options runtime --timestamp -s "$IDENTITY" "$tool" ;; esac
+    case "$tool" in *.LICENSE|*/lipo) ;; *) codesign --force --options runtime --timestamp -s "$IDENTITY" "$tool" ;; esac
   done
   # The Wine loader helper: its restricted entitlement is only honoured next to the profile, and a
   # binary claiming it without one is killed at exec, so without the profile it is signed plain.

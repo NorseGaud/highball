@@ -1,0 +1,17 @@
+#!/bin/sh
+# lipo stand-in for winetricks (highball#135, #183, #180).
+#
+# winetricks asks `lipo -archs <file>` which architecture Wine is, to pick the right Wine for a
+# 64-bit prefix. /usr/bin/lipo is a stub that needs Xcode's command line tools and an accepted
+# Xcode licence: without them it prints the licence text or offers to install the tools, answers
+# nothing, winetricks then reaches for a wine64 that does not exist, and the core fonts step
+# stops with "echo '%AppData%' returned empty string". This answers that one question from the
+# Mach-O header with od, which every Mac has, and hands anything else to the real lipo.
+if [ "$1" = "-archs" ] && [ $# -eq 2 ] && [ -r "$2" ]; then
+    case "$(od -An -t x1 -N 8 "$2" 2>/dev/null | tr -d ' \n')" in
+        cffaedfe07000001) echo x86_64; exit 0 ;;
+        cffaedfe0c000001) echo arm64; exit 0 ;;
+        cefaedfe07000000) echo i386; exit 0 ;;
+    esac
+fi
+exec /usr/bin/lipo "$@"
