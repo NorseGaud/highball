@@ -1624,7 +1624,14 @@ final class AppState {
             let runner = WineRunner(paths: paths, engine: engine, bottle: bottle)
             do {
                 try await DisplayModeEmulation.set(on, in: runner, executable: exe)
-                appendLog("\(exe.lastPathComponent): emulated display mode changes \(on ? "on" : "off") in \(bottle.name); the next launch uses it.")
+                // Wine builds the list of display modes when the environment starts, so the
+                // emulated ones appear only after a restart. Nothing is stopped under a game.
+                if !sessionRuns(in: bottle) {
+                    Task.detached { try? runner.kill() }
+                    appendLog("\(exe.lastPathComponent): emulated display mode changes \(on ? "on" : "off") in \(bottle.name); stopped the environment's background processes so its next start lists the modes.")
+                } else {
+                    appendLog("\(exe.lastPathComponent): emulated display mode changes \(on ? "on" : "off") in \(bottle.name); applies once the game running there has quit and the environment restarts.")
+                }
             } catch {
                 displayModeWritten[key] = nil
                 fail(error, bottle: bottle)

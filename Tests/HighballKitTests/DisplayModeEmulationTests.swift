@@ -74,4 +74,34 @@ final class UnswitchedDisplayModeTests: XCTestCase {
         """
         XCTAssertFalse(DisplayModeEmulation.looksUnswitched(inLog: ordinary))
     }
+
+    // The list builder (explorer.exe) keeps the value while any other program has it on, so
+    // turning one game off does not take the low-resolution modes away from another.
+    func testTheListBuilderStaysOnWhileAnotherProgramHasIt() {
+        let reg = """
+        [Software\\Wine\\AppDefaults\\DarkOmen.exe\\X11 Driver] 1759750000
+        "EmulateModeset"="y"
+
+        [Software\\Wine\\AppDefaults\\explorer.exe\\X11 Driver] 1759750000
+        "EmulateModeset"="y"
+
+        [Software\\Wine\\AppDefaults\\FNAF.exe\\X11 Driver] 1759750000
+        "EmulateModeset"="y"
+        """
+        XCTAssertTrue(DisplayModeEmulation.othersOn(userReg: reg, except: "DarkOmen.exe"), "FNAF still has it")
+        XCTAssertTrue(DisplayModeEmulation.othersOn(userReg: reg, except: "fnaf.exe"), "Dark Omen still has it, names in any case")
+        let alone = """
+        [software\\wine\\appdefaults\\POP3.EXE\\X11 Driver] 1759750000
+        "EmulateModeset"="y"
+
+        [Software\\Wine\\AppDefaults\\explorer.exe\\X11 Driver] 1759750000
+        "EmulateModeset"="y"
+
+        [Software\\Wine\\AppDefaults\\Other.exe\\Direct3D] 1759750000
+        "EmulateModeset"="y"
+        """
+        XCTAssertFalse(DisplayModeEmulation.othersOn(userReg: alone, except: "POP3.EXE"),
+                       "the builder itself and a value under another driver key do not count")
+        XCTAssertTrue(DisplayModeEmulation.othersOn(userReg: alone, except: "Unrelated.exe"), "a key written in lower case still counts")
+    }
 }

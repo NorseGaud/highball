@@ -50,14 +50,53 @@ public enum DisplayModeEmulation {
         return raw.lowercased() == "\"y\""
     }
 
-    /// Turns it on or off for `exe` through the bottle's Wine. Programs read the registry when
-    /// they start, so a running Steam client needs no restart for the next launch to see it.
+    /// The program that builds the environment's list of display modes when it starts. Wine adds
+    /// its virtual modes (640x480 and the other sizes a game may ask for) to that shared list only
+    /// when the process building it emulates mode changes itself; a game with the setting alone
+    /// validates its request against the Mac's real modes and gets "bad mode" for any the display
+    /// does not list. Measured on an M4 with Warhammer: Dark Omen (640x480x16, engine r21,
+    /// 2026-10-06): the game's own value alone, NtUserChangeDisplaySettings returned -2; with
+    /// explorer.exe's too, the change went through and the window opened scaled to the screen.
+    /// Prince of Persia: The Two Thrones (highball#128), Project IGI (#244) and Dead Rising 3 (#103)
+    /// failed at the same refused change.
+    public static let listBuilder = "explorer.exe"
+
+    /// Whether any program other than `except` has it on, read from the registry text: the list
+    /// builder's value stays while one does.
+    public static func othersOn(userReg: String, except executableName: String) -> Bool {
+        var current: String?
+        for line in userReg.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.hasPrefix("[") {
+                // Keys are case-insensitive; reg.exe keeps whatever case it was given.
+                let key = line.dropFirst().prefix { $0 != "]" }.replacingOccurrences(of: "\\\\", with: "\\").lowercased()
+                let prefix = "software\\wine\\appdefaults\\", suffix = "\\x11 driver"
+                if key.hasPrefix(prefix), key.hasSuffix(suffix) {
+                    current = String(key.dropFirst(prefix.count).dropLast(suffix.count))
+                } else { current = nil }
+            } else if let program = current, program.lowercased() != executableName.lowercased(),
+                      program.lowercased() != listBuilder, line.lowercased().hasPrefix("\"\(valueName.lowercased())\"=\"y\"") {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Turns it on or off for `exe` through the bottle's Wine, and keeps the list builder's value
+    /// in step: on with the first program, off with the last. Programs read the registry when they
+    /// start, and the list is rebuilt when the environment starts, so a change applies from the
+    /// environment's next start.
     public static func set(_ on: Bool, in runner: WineRunner, executable exe: URL) async throws {
         let key = key(forExecutable: exe)
+        let builder = Self.key(forExecutable: URL(fileURLWithPath: listBuilder))
         if on {
             try await runner.regAdd(key: key, name: valueName, type: "REG_SZ", data: "y")
+            try await runner.regAdd(key: builder, name: valueName, type: "REG_SZ", data: "y")
         } else {
             try await runner.regDelete(key: key, name: valueName)
+            let reg = (try? String(contentsOf: runner.bottle.url.appending(path: "user.reg"), encoding: .utf8)) ?? ""
+            if !othersOn(userReg: reg, except: exe.lastPathComponent) {
+                try? await runner.regDelete(key: builder, name: valueName)
+            }
         }
     }
 }
