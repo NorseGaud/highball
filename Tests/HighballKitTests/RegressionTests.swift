@@ -365,6 +365,25 @@ extension RegressionTests {
         XCTAssertTrue(digest.contains("dxvk.enableAsync = False"), "the effective config block must survive")
     }
 
+    // highball#184, #135, #235: the newest log was a registry write the app made after the game,
+    // and with no graphics marker in the game's log the picker fell back to the newest file.
+    func testReportNeverAttachesTheAppsOwnChores() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "hb-chores-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let game = dir.appending(path: "2026-10-02T101500Z-Games-TS4_x64.exe.log")
+        try "# gin e bottle=Games renderer=dxmt\n# wine TS4_x64.exe\nerr: the launcher crashed\n".write(to: game, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-120)], ofItemAtPath: game.path)
+        for chore in ["2026-10-02T101700Z-Games-reg.log", "2026-10-02T101700Z-Games-reg-2.log",
+                      "2026-10-02T101701Z-Games-steam-shutdown.log", "2026-10-02T101702Z-Games-winecfg.log"] {
+            try "reg add HKCU\\Software\\Wine\\Mac Driver /v RightOptionIsAlt\n".write(to: dir.appending(path: chore), atomically: true, encoding: .utf8)
+        }
+        XCTAssertEqual(BugReport.mostInformativeLog(in: [dir])?.url.lastPathComponent, game.lastPathComponent)
+        XCTAssertTrue(BugReport.isChore(dir.appending(path: "x-Games-reg-12.log")))
+        XCTAssertFalse(BugReport.isChore(dir.appending(path: "x-Games-regedit.exe.log")), "a program called reg-something is not a chore")
+        XCTAssertFalse(BugReport.isChore(dir.appending(path: "x-Games-winetricks-corefonts.log")), "a winetricks log explains a failed dependency")
+    }
+
     // A blind suffix(30) is useless on a wine log: the end is MoltenVK warning spam while the
     // block that identifies the backend sits thousands of lines earlier (6547 of 8185 in #21).
     func testReportDigestKeepsTheBackendBlockBuriedMidLogAndCollapsesSpam() {

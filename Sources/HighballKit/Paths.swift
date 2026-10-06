@@ -445,7 +445,12 @@ public enum BugReport {
         let modified: (URL) -> Date = {
             (try? $0.resourceValues(forKeys: key))?.contentModificationDate ?? .distantPast
         }
-        let newestFirst = logs.sorted { modified($0) > modified($1) }.prefix(maxLogsExamined)
+        // The app's own chores (a registry write, Steam's shutdown, winecfg) never show a game
+        // failing, yet they are written after every launch setting change, so they were often the
+        // newest file: three reports came with a keyboard-mapping registry write attached and
+        // nothing else (highball#184, #135, #235). They are left out before the newest are taken,
+        // so they cannot crowd the game's own log out either.
+        let newestFirst = logs.filter { !isChore($0) }.sorted { modified($0) > modified($1) }.prefix(maxLogsExamined)
         // A wineboot log is the prefix booting, and it ends before the game starts, so it can
         // never show a game failing. It nonetheless matches a backend marker, because wineboot
         // creates a d3d adapter and Wine shouts `wined3d_adapter_create` while doing it — so the
@@ -466,6 +471,14 @@ public enum BugReport {
         }
         // Only when it is genuinely the only thing on disk — a bottle that has never run anything.
         return fallback ?? bootFallback
+    }
+
+    /// A log of the app's own housekeeping, by the label in its name: `<stamp>-<bottle>-reg.log`,
+    /// numbered `-reg-2.log` when two land in the same second. Pure, so it is tested by name.
+    static func isChore(_ url: URL) -> Bool {
+        var name = url.deletingPathExtension().lastPathComponent
+        if let dash = name.lastIndex(of: "-"), Int(name[name.index(after: dash)...]) != nil { name = String(name[..<dash]) }
+        return ["-reg", "-steam-shutdown", "-winecfg"].contains { name.hasSuffix($0) }
     }
 
     /// `samplingLiveGames: false` skips the live-process sample (tests; callers that must not
