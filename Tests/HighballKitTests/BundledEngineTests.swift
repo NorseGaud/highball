@@ -64,13 +64,40 @@ final class BundledEngineTests: XCTestCase {
                        "the same D3DMetal 4 component as the Wine 10 line, downloaded once")
         XCTAssertFalse(EngineManifest.satisfies(current: r19, wanted: r18), "r19 lacks D3DMetal 4")
         XCTAssertFalse(EngineManifest.needsPrefixRefresh(from: r19, to: r18), "same Wine: moving between the two is cheap")
-        // Every Wine 11 pin that predates these two is offered r19 on macOS 27, never r18.
-        for pin in ["x64-crossover26.3-r5", "x64-crossover26.3-r7", "x64-crossover26.3-r8", "x64-crossover26.3-r9", "x64-crossover26.3-r15"] {
+    }
+
+    /// r21 is r19 and r20 is r18 with the Wine rebuilt for patch 0020 (the Mac driver stops doubling
+    /// HORZRES and VERTRES in retina mode, highball#261) and the refreshed 0012, numbered the same
+    /// way: the D3DMetal 4 one below, so every older plain pin is offered the D3DMetal 3 revision
+    /// and Forza Horizon 6's pin on r18 is offered r20.
+    func testR21AndR20AreR19AndR18WithTheRetinaFixedWine() throws {
+        let all = try manifests()
+        func one(_ id: String) throws -> EngineManifest { try XCTUnwrap(all.first { $0.id == id }, "\(id) missing") }
+        for (new, old) in [("x64-crossover26.3-r21", "x64-crossover26.3-r19"), ("x64-crossover26.3-r20", "x64-crossover26.3-r18")] {
+            let n = try one(new), o = try one(old)
+            XCTAssertEqual(Set(n.components.keys), Set(o.components.keys), "\(new) has \(old)'s components")
+            for (name, c) in o.components where name != "wine" {
+                XCTAssertEqual(n.components[name]?.sha256, c.sha256, "\(new)/\(name) must be \(old)'s, only Wine is rebuilt")
+            }
+            XCTAssertNotEqual(n.components["wine"]?.sha256, o.components["wine"]?.sha256, "\(new) carries the rebuilt Wine")
+            XCTAssertTrue(n.components["wine"]?.url.absoluteString.hasPrefix("https://github.com/gauthierpiarrette/highball-engine/releases/download/engine-wine-11.0-") == true)
+            XCTAssertEqual(n.minMacOS, o.minMacOS)
+            XCTAssertEqual(n.baseEnv, o.baseEnv)
+        }
+        XCTAssertEqual(try one("x64-crossover26.3-r20").components["wine"]?.sha256, try one("x64-crossover26.3-r21").components["wine"]?.sha256,
+                       "one Wine build behind both, downloaded once")
+        // Every older plain Wine 11 pin is offered r21 on macOS 27, never the D3DMetal 4 one.
+        for pin in ["x64-crossover26.3-r5", "x64-crossover26.3-r7", "x64-crossover26.3-r8", "x64-crossover26.3-r9", "x64-crossover26.3-r15", "x64-crossover26.3-r19"] {
             let wanted = try one(pin)
             let offered = all.filter { EngineManifest.satisfies(current: $0, wanted: wanted) && $0.runs(onMacOS: "27.0") }
                 .max { (EngineManifest.revision(of: $0.id) ?? 0) < (EngineManifest.revision(of: $1.id) ?? 0) }
-            XCTAssertEqual(offered?.id, r19.id, "a pin on \(pin) must get the D3DMetal 3 revision")
+            XCTAssertEqual(offered?.id, "x64-crossover26.3-r21", "a pin on \(pin) must get the newest D3DMetal 3 revision")
         }
+        let forzaPin = try one("x64-crossover26.3-r18")
+        let forOffer = all.filter { EngineManifest.satisfies(current: $0, wanted: forzaPin) && $0.runs(onMacOS: "27.0") }
+            .max { (EngineManifest.revision(of: $0.id) ?? 0) < (EngineManifest.revision(of: $1.id) ?? 0) }
+        XCTAssertEqual(forOffer?.id, "x64-crossover26.3-r20", "Forza Horizon 6's pin gets the retina-fixed D3DMetal 4 revision")
+        XCTAssertFalse(EngineManifest.satisfies(current: try one("x64-crossover26.3-r21"), wanted: forzaPin), "r21 lacks D3DMetal 4")
     }
 
     /// Frame generation left Highball on 2026-09-27 at its author's request (itsOwen's lsfg-metal,
