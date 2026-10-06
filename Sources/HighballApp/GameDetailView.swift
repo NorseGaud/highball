@@ -6,7 +6,6 @@ import HighballKit
 struct GameDetailView: View {
     @Environment(AppState.self) private var state
     let passedItem: LibraryItem
-    @State private var showBottleSettings = false
     @State private var coverDropTargeted = false
     /// The launch arguments being typed; saved on Return and when the page closes, so a space
     /// typed between two arguments is not normalised away mid-word.
@@ -60,9 +59,6 @@ struct GameDetailView: View {
         }
         .background(BottleBackdrop())
         .navigationTitle(state.displayTitle(item))
-        .sheet(isPresented: $showBottleSettings) {
-            if let bottle { BottleSettingsSheet(bottle: bottle) }
-        }
     }
 
     // MARK: Pieces
@@ -409,7 +405,7 @@ struct GameDetailView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(L("Environment")).font(.caption).foregroundStyle(.secondary).frame(width: 110, alignment: .leading)
                             Text(bottle.name).font(.callout)
-                            Button(L("Environment settings…")) { showBottleSettings = true }.controlSize(.small)
+                            NavigationLink(L("Environment settings…"), value: EnvironmentSettingsDestination(name: bottle.name)).controlSize(.small)
                         }
                         // Another copy plays from its own environment; once played there, the
                         // tile follows it (highball#264).
