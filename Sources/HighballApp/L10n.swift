@@ -522,6 +522,7 @@ enum L10n {
         // An environment that already fits a game's engine, and the windows Highball brings forward (highball-db#318, highball#264)
         "%d installed": "%d installés",
         "Play there": "Y jouer",
+        "Passed to the game on every Play from Highball, after any its fix adds. Quote arguments that contain spaces.": "Transmis au jeu à chaque lancement depuis Highball, après ceux qu'ajoute son correctif. Mettez entre guillemets les arguments qui contiennent des espaces.",
         "The engine belongs to the environment '%@', so a change here applies to every game in it. The page that opens lists them before anything moves.": "Le moteur appartient à l'environnement « %@ » : le changer ici l'applique à tous ses jeux. La page qui s'ouvre les liste avant tout changement.",
         "Choose the program on the disc": "Choisissez le programme du disque",
         "Usually the disc's setup or install program.": "En général le programme d'installation du disque.",

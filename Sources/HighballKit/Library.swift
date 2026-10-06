@@ -257,6 +257,10 @@ public struct LibraryStore: Sendable {
         /// to change one game without changing the whole environment). Optional so files written
         /// before it still decode.
         var overrides: [String: Renderer]?
+        /// Launch arguments the player set for one game, by library id, passed after any the
+        /// database adds (highball#236: the only ways were Steam's own Launch Options or a program
+        /// entry). Optional so older files still decode.
+        var launchArgs: [String: [String]]?
     }
 
     public let paths: HighballPaths
@@ -279,6 +283,18 @@ public struct LibraryStore: Sendable {
         var overrides = shape.overrides ?? [:]
         overrides[id] = renderer
         shape.overrides = overrides.isEmpty ? nil : overrides
+        try? paths.ensure()
+        if let data = try? JSONEncoder.highball.encode(shape) { try? data.write(to: fileURL, options: .atomic) }
+    }
+
+    public func launchArguments() -> [String: [String]] { loadShape().launchArgs ?? [:] }
+
+    /// Sets, or with an empty list clears, the launch arguments of one game.
+    public func setLaunchArguments(_ args: [String], for id: String) {
+        var shape = loadShape()
+        var all = shape.launchArgs ?? [:]
+        all[id] = args.isEmpty ? nil : args
+        shape.launchArgs = all.isEmpty ? nil : all
         try? paths.ensure()
         if let data = try? JSONEncoder.highball.encode(shape) { try? data.write(to: fileURL, options: .atomic) }
     }

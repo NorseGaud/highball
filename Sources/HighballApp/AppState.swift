@@ -140,6 +140,16 @@ final class AppState {
     /// Graphics modes chosen per game (library id), the store's copy for the views.
     var libraryOverrides: [String: Renderer] = [:]
     func rendererOverride(for item: LibraryItem) -> Renderer? { libraryOverrides[item.id] }
+    /// Launch arguments the player set for a game (highball#236), by library id.
+    var libraryLaunchArgs: [String: [String]] = [:]
+    func launchArguments(for item: LibraryItem) -> [String] { libraryLaunchArgs[item.id] ?? [] }
+    func setLaunchArguments(_ line: String, for item: LibraryItem) {
+        let args = ArgumentLine.split(line)
+        guard args != launchArguments(for: item) else { return }
+        libraryStore.setLaunchArguments(args, for: item.id)
+        libraryLaunchArgs = libraryStore.launchArguments()
+        appendLog(args.isEmpty ? "\(item.id): launch arguments cleared" : "\(item.id): launch arguments set to \(ArgumentLine.join(args))")
+    }
     func setRendererOverride(_ renderer: Renderer?, for id: String) {
         libraryStore.setRendererOverride(renderer, for: id)
         libraryOverrides = libraryStore.rendererOverrides()
@@ -863,6 +873,7 @@ final class AppState {
         startDiscordWatch()
         libraryPlays = libraryStore.load()
         libraryOverrides = libraryStore.rendererOverrides()
+        libraryLaunchArgs = libraryStore.launchArguments()
         rebuildLibrary()
         steamOwnedRefresh()
         epicRefresh()
@@ -2240,8 +2251,9 @@ final class AppState {
         // A mode the user set on the environment is respected, as the page promises; the row's
         // verified mode applies otherwise, and a forced mode (the D3DMetal ask) beats both.
         let renderer = preferred ?? (bottle.settings.rendererExplicit ? nil : entry?.effectiveRenderer())
-        // Per-game launch args ride the db (e.g. windowed for legacy CS:GO on macOS 26, #21).
-        let extraArgs = entry?.effectiveLaunchArgs() ?? []
+        // Per-game launch args ride the db (e.g. windowed for legacy CS:GO on macOS 26, #21), then
+        // the ones the player set on the game's page (highball#236).
+        let extraArgs = (entry?.effectiveLaunchArgs() ?? []) + (libraryLaunchArgs["steam:\(game.appid)"] ?? [])
         // The variables this game's recipe scoped to it (highball#198); other games get none of them.
         let gameEnvironment = bottle.settings.environment(forGame: entry?.id)
         let markers = SessionWatch.markers(installdir: game.installdir)

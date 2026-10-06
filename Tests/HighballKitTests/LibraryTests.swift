@@ -150,4 +150,18 @@ final class LibraryTests: XCTestCase {
         try? Data(acf.replacingOccurrences(of: "1756300000", with: "0").utf8).write(to: tmp)
         XCTAssertNil(SteamLibrary.parseManifest(tmp)?.lastPlayed)
     }
+
+    // highball#236: launch arguments for one game, kept beside its graphics mode.
+    func testLaunchArgumentsPerGameRoundTripAndClear() throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "hb-args-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+        let store = LibraryStore(paths: HighballPaths(home: home))
+        XCTAssertTrue(store.launchArguments().isEmpty)
+        store.setLaunchArguments(["-dx11", "-windowed"], for: "steam:1174180")
+        store.setRendererOverride(.d3dmetal, for: "steam:1174180")
+        XCTAssertEqual(store.launchArguments()["steam:1174180"], ["-dx11", "-windowed"])
+        XCTAssertEqual(store.rendererOverrides()["steam:1174180"], .d3dmetal, "the two settings live side by side")
+        store.setLaunchArguments([], for: "steam:1174180")
+        XCTAssertNil(store.launchArguments()["steam:1174180"])
+    }
 }

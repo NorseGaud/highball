@@ -8,6 +8,10 @@ struct GameDetailView: View {
     let passedItem: LibraryItem
     @State private var showBottleSettings = false
     @State private var coverDropTargeted = false
+    /// The launch arguments being typed; saved on Return and when the page closes, so a space
+    /// typed between two arguments is not normalised away mid-word.
+    @State private var argsText = ""
+    @State private var argsLoaded = false
     /// The live row: after an install, a delete or a rename, the passed-in copy goes stale.
     private var item: LibraryItem { state.libraryItems.first { $0.id == passedItem.id } ?? passedItem }
     @State private var showWhy = false
@@ -341,6 +345,23 @@ struct GameDetailView: View {
                                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                                 }
                             }
+                        }
+                        if item.source == .steam {
+                            HStack(alignment: .top, spacing: 12) {
+                                Text(L("Launch arguments")).font(.caption).foregroundStyle(.secondary).frame(width: 110, alignment: .leading).padding(.top, 4)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    TextField("", text: $argsText, prompt: Text(verbatim: "-dx11 -windowed"))
+                                        .font(.body.monospaced()).frame(maxWidth: 360)
+                                        .onSubmit { state.setLaunchArguments(argsText, for: item) }
+                                    Text(L("Passed to the game on every Play from Highball, after any its fix adds. Quote arguments that contain spaces."))
+                                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .onAppear {
+                                guard !argsLoaded else { return }
+                                argsText = ArgumentLine.join(state.launchArguments(for: item)); argsLoaded = true
+                            }
+                            .onDisappear { state.setLaunchArguments(argsText, for: item) }
                         }
                         // The engine is the environment's, so the page says so and can change it
                         // through the same switch page as the environment's settings, which lists
