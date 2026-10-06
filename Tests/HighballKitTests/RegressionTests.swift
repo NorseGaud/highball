@@ -659,6 +659,20 @@ extension RegressionTests {
         XCTAssertTrue(ProcessTable.belongs(workingDirectory: "/tmp/.wine-501/server-1-2", toPrefix: "/b/Gaming", serverDirectory: "/tmp/.wine-501/server-1-2"))
         XCTAssertFalse(ProcessTable.belongs(workingDirectory: "/tmp/.wine-501/server-1-3", toPrefix: "/b/Gaming", serverDirectory: "/tmp/.wine-501/server-1-2"))
 
+        // WINEPREFIX decides when the environment can be read. A game whose folder is a link
+        // into another environment has that other environment as its resolved working
+        // directory; it still belongs where it runs (2026-10-06, Forza Horizon 6 in FH6Rec,
+        // its folder linked into M4W10: stopping M4W10 ended it).
+        let linkedGame = "/b/M4W10/drive_c/Program Files (x86)/Steam/steamapps/common/ForzaHorizon6"
+        XCTAssertTrue(ProcessTable.belongs(environmentPrefix: "/b/FH6Rec", workingDirectory: linkedGame, toPrefix: "/b/FH6Rec", serverDirectory: nil))
+        XCTAssertFalse(ProcessTable.belongs(environmentPrefix: "/b/FH6Rec", workingDirectory: linkedGame, toPrefix: "/b/M4W10", serverDirectory: nil),
+                       "stopping the environment the folder links into leaves the game alone")
+        XCTAssertFalse(ProcessTable.belongs(environmentPrefix: "/b/Gaming2", workingDirectory: "/b/Gaming/drive_c", toPrefix: "/b/Gaming", serverDirectory: nil))
+        // No readable environment, or no WINEPREFIX in it: the working directory decides, as before.
+        XCTAssertTrue(ProcessTable.belongs(environmentPrefix: nil, workingDirectory: "/b/Gaming/drive_c", toPrefix: "/b/Gaming", serverDirectory: nil))
+        XCTAssertTrue(ProcessTable.belongs(environmentPrefix: "", workingDirectory: "/b/Gaming/drive_c", toPrefix: "/b/Gaming", serverDirectory: nil))
+        XCTAssertFalse(ProcessTable.belongs(environmentPrefix: nil, workingDirectory: nil, toPrefix: "/b/Gaming", serverDirectory: nil))
+
         // The server directory is derived from the prefix path's device and inode, the way
         // Wine names it.
         var st = stat(); XCTAssertEqual(stat(prefix.path, &st), 0)

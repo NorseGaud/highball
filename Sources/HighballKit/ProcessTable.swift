@@ -59,14 +59,39 @@ public enum ProcessTable {
         return false
     }
 
+    /// Whether a process belongs to the prefix. A Wine process carries WINEPREFIX in its
+    /// environment (Wine hands the whole Unix environment on to every process it starts, games
+    /// started by Steam included), and that decides. The working directory is the fallback, for
+    /// processes whose environment cannot be read (Apple platform binaries such as /bin/sh) or
+    /// that have no WINEPREFIX. A working directory alone misattributes a game whose folder is a
+    /// link into another environment, since the kernel reports the resolved path: stopping that
+    /// other environment ended the game, and stopping its own missed it (2026-10-06, Forza
+    /// Horizon 6 running in FH6Rec, its folder linked into M4W10). Pure, so it is tested
+    /// without processes.
+    public static func belongs(environmentPrefix: String?, workingDirectory cwd: String?, toPrefix prefix: String,
+                               serverDirectory: String?) -> Bool {
+        if let environmentPrefix, !environmentPrefix.isEmpty { return environmentPrefix == prefix }
+        guard let cwd else { return false }
+        return belongs(workingDirectory: cwd, toPrefix: prefix, serverDirectory: serverDirectory)
+    }
+
     /// Process ids that belong to the prefix, never our own.
     public static func processes(ofPrefix prefix: URL) -> [pid_t] {
         let root = canonical(prefix.path)
         let server = serverDirectory(forPrefix: prefix).map { canonical($0.path) }
         let me = getpid()
+        var resolved: [String: String] = [:]   // a few prefixes recur across many processes
         return allPIDs().filter { pid in
+            // Only our own processes have a readable working directory; the rest are skipped here.
             guard pid != me, let cwd = workingDirectory(of: pid) else { return false }
-            return belongs(workingDirectory: canonical(cwd), toPrefix: root, serverDirectory: server)
+            let declared = commandLineAndEnvironment(of: pid)?.environment["WINEPREFIX"].flatMap { path -> String? in
+                guard !path.isEmpty else { return nil }
+                if let hit = resolved[path] { return hit }
+                let canon = canonical(path)
+                resolved[path] = canon
+                return canon
+            }
+            return belongs(environmentPrefix: declared, workingDirectory: canonical(cwd), toPrefix: root, serverDirectory: server)
         }
     }
 
