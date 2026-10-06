@@ -84,6 +84,57 @@ final class RecipeScopeTests: XCTestCase {
         XCTAssertEqual(Recipe.scopeLeakedEnvironment(of: try recipe(launcher), in: &l), [])
     }
 
+    /// Planet Coaster 2's recipe dropped its two Metal validation variables after they froze two
+    /// Macs, and environments set up before kept them (highball-db#115, #356). Play brings a
+    /// game's variables in line with its recipe as the database has it now.
+    func testGameVariablesFollowTheRecipeAsItIsNow() throws {
+        let coaster = try recipe("""
+        {"id": "planet-coaster-2", "kind": "game", "title": "Planet Coaster 2", "requires": ["steam"],
+         "renderer": "d3dmetal", "steps": [{"type": "renderer", "renderer": "d3dmetal"}],
+         "knownIssues": [], "lastVerified": null}
+        """)
+        var settings = BottleSettings(name: "t", engineID: "e")
+        settings.gameEnvironment["planet-coaster-2"] = ["MTL_DEBUG_LAYER": "1", "MTL_DEBUG_LAYER_ERROR_MODE": "nslog"]
+        settings.gameEnvironment["the-sims-legacy-collection"] = ["MVK_SHADOW_IMPORT": "1"]
+        settings.environment = ["MY_OWN": "x"]
+        XCTAssertEqual(Recipe.syncScopedEnvironment(of: coaster, in: &settings), ["MTL_DEBUG_LAYER", "MTL_DEBUG_LAYER_ERROR_MODE"])
+        XCTAssertNil(settings.gameEnvironment["planet-coaster-2"], "dropped from the recipe, dropped here")
+        XCTAssertEqual(settings.gameEnvironment["the-sims-legacy-collection"], ["MVK_SHADOW_IMPORT": "1"], "another game's stay")
+        XCTAssertEqual(settings.environment, ["MY_OWN": "x"], "the environment's own list is the owner's")
+        XCTAssertEqual(Recipe.syncScopedEnvironment(of: coaster, in: &settings), [], "already in line")
+        // A changed value comes back to the recipe's, and one the recipe never set goes.
+        var old = BottleSettings(name: "t", engineID: "e")
+        old.gameEnvironment["the-sims-legacy-collection"] = ["MVK_SHADOW_IMPORT": "0", "OLD": "x"]
+        XCTAssertEqual(Recipe.syncScopedEnvironment(of: try recipe(sims), in: &old), ["MVK_SHADOW_IMPORT", "OLD"])
+        XCTAssertEqual(old.gameEnvironment["the-sims-legacy-collection"], ["MVK_SHADOW_IMPORT": "1"])
+        // A variable the recipe gained since arrives.
+        var none = BottleSettings(name: "t", engineID: "e")
+        XCTAssertEqual(Recipe.syncScopedEnvironment(of: try recipe(sims), in: &none), ["MVK_SHADOW_IMPORT"])
+        XCTAssertEqual(none.gameEnvironment["the-sims-legacy-collection"], ["MVK_SHADOW_IMPORT": "1"])
+        // A launcher's variables are bottle-wide and never touched here.
+        var l = BottleSettings(name: "t", engineID: "e")
+        l.environment = ["DXMT_ALLOW_CROSS_PROCESS_SWAPCHAIN": "1"]
+        XCTAssertEqual(Recipe.syncScopedEnvironment(of: try recipe(launcher), in: &l), [])
+        XCTAssertEqual(l.environment, ["DXMT_ALLOW_CROSS_PROCESS_SWAPCHAIN": "1"])
+    }
+
+    func testAPinsCopyFollowsOnlyWhereItHoldsTheRecipesOldValue() throws {
+        let game = try recipe("""
+        {"id": "some-game", "kind": "game", "title": "Some Game", "requires": [], "renderer": null,
+         "steps": [{"type": "environment", "name": "A", "value": "2"},
+                   {"type": "pin", "pin": {"name": "Some Game", "path": "Games/some.exe"}}],
+         "knownIssues": [], "lastVerified": null}
+        """)
+        var settings = BottleSettings(name: "t", engineID: "e")
+        settings.gameEnvironment["some-game"] = ["A": "1", "B": "1"]
+        settings.pins = [Pin(name: "Some Game", path: "Games/some.exe", environment: ["A": "1", "B": "mine", "C": "3"]),
+                         Pin(name: "Other", path: "Games/other.exe", environment: ["A": "1"])]
+        XCTAssertEqual(Recipe.syncScopedEnvironment(of: game, in: &settings), ["A", "B"])
+        XCTAssertEqual(settings.gameEnvironment["some-game"], ["A": "2"])
+        XCTAssertEqual(settings.pins[0].environment, ["A": "2", "B": "mine", "C": "3"], "the recipe's old value follows, a hand edit stays")
+        XCTAssertEqual(settings.pins[1].environment, ["A": "1"], "a pin the recipe did not add is not its")
+    }
+
     func testSteamRestartsWhenTheClientCarriesAnotherGamesVariable() {
         var settings = BottleSettings(name: "t", engineID: "e")
         settings.gameEnvironment["the-sims-legacy-collection"] = ["MVK_SHADOW_IMPORT": "1"]

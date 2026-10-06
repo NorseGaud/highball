@@ -397,14 +397,22 @@ final class AppState {
         var bottle = found
         // A game whose recipe was applied before variables were scoped still has them bottle-wide,
         // where every other program inherits them (highball#198). Move them to the game once; the
-        // launch below then carries them for this game only, and the log says what moved.
+        // launch below then carries them for this game only, and the log says what moved. Then the
+        // game's variables follow its recipe as the database has it now, so a fix that changed or
+        // dropped one reaches environments set up before it (highball-db#115, #356).
         if let recipe = fixRecipe(for: item), bottle.settings.recipes.contains(recipe.id) {
             var settings = bottle.settings
             let moved = HighballKit.Recipe.scopeLeakedEnvironment(of: recipe, in: &settings)
-            if !moved.isEmpty {
+            let synced = HighballKit.Recipe.syncScopedEnvironment(of: recipe, in: &settings)
+            if !moved.isEmpty || !synced.isEmpty {
                 bottle.settings = settings
                 try? bottle.save()
-                appendLog("\(item.title): \(moved.joined(separator: ", ")) now applies to this game only, not to everything in \(bottle.name).")
+                if !moved.isEmpty {
+                    appendLog("\(item.title): \(moved.joined(separator: ", ")) now applies to this game only, not to everything in \(bottle.name).")
+                }
+                if !synced.isEmpty {
+                    appendLog("\(item.title): the fix's variables now match the database (\(synced.joined(separator: ", "))).")
+                }
                 refresh()
             }
         }

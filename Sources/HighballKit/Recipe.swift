@@ -649,4 +649,36 @@ public extension Recipe {
         }
         return moved
     }
+
+    /// Brings the variables a game recipe scoped to its game in line with the recipe as it is
+    /// now. They are written when the recipe is applied, so a database update that changed or
+    /// dropped one never reached an environment set up before it: Planet Coaster 2's recipe
+    /// dropped two Metal validation variables after they froze two Macs, and both players'
+    /// environments kept them (highball-db#115, #356, 2026-10-06). Only the recipe writes
+    /// `gameEnvironment[recipe.id]`, so it follows the recipe exactly. A pin the recipe added
+    /// carries a copy, which follows only where it still holds the recipe's old value: a value
+    /// changed by hand stays. Returns the names added, changed or dropped, sorted, empty when
+    /// the environment already matches.
+    static func syncScopedEnvironment(of recipe: Recipe, in settings: inout BottleSettings) -> [String] {
+        guard recipe.kind == .game else { return [] }
+        var wanted: [String: String] = [:]
+        var pinPaths: [String] = []
+        for step in recipe.steps {
+            switch step {
+            case let .environment(name, value): wanted[name] = value
+            case let .pin(p): pinPaths.append(p.path)
+            default: break
+            }
+        }
+        let had = settings.gameEnvironment[recipe.id] ?? [:]
+        let changed = Set(had.keys).union(wanted.keys).filter { had[$0] != wanted[$0] }.sorted()
+        guard !changed.isEmpty else { return [] }
+        settings.gameEnvironment[recipe.id] = wanted.isEmpty ? nil : wanted
+        for i in settings.pins.indices where pinPaths.contains(settings.pins[i].path) {
+            for name in changed where settings.pins[i].environment[name] == had[name] {
+                settings.pins[i].environment[name] = wanted[name]
+            }
+        }
+        return changed
+    }
 }
