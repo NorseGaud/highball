@@ -5,6 +5,14 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.10.12</title>
+      <description><![CDATA[Games in D3DMetal mode start with a PlayStation controller connected, and a game's fix settings follow the database]]></description>
+      <pubDate>Tue, 06 Oct 2026 22:13:51 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.12/Highball-0.10.12.zip" sparkle:version="0.10.12" sparkle:shortVersionString="0.10.12" sparkle:edSignature="/6MC0ZFvg+WsQGdxBHIxcEsL39V+HqaMX3vBQjWDddxerONR5RHpHPYM/fJFhpLi+4RcJK4XWDJpjGzBHtfFAA==" length="4678037" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.10.11</title>
       <description><![CDATA[Steam's window works in a D3DMetal environment, New environment installs Steam for a Steam game, Retina mode no longer doubles the screen size in any engine, new Forza Horizon 6 setups get r20]]></description>
       <pubDate>Tue, 06 Oct 2026 19:39:29 +0200</pubDate>
