@@ -5,6 +5,14 @@
     <link>https://github.com/gauthierpiarrette/highball</link>
     <description>Run Windows games on Apple Silicon.</description>
     <item>
+      <title>Highball 0.10.11</title>
+      <description><![CDATA[Steam's window works in a D3DMetal environment, New environment installs Steam for a Steam game, Retina mode no longer doubles the screen size in any engine, new Forza Horizon 6 setups get r20]]></description>
+      <pubDate>Tue, 06 Oct 2026 19:39:29 +0200</pubDate>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.11/Highball-0.10.11.zip" sparkle:version="0.10.11" sparkle:shortVersionString="0.10.11" sparkle:edSignature="7ymIPYBnYYM7ai5mmCb8hN1jq1HoqIb0zt89mrdXlrj2BmiA1P6z9o1K/Ve9RYRc6N9yA7L2HItPiFU3ij8FBQ==" length="4672272" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Highball 0.10.10</title>
       <description><![CDATA[<p>Forza Horizon 6 plays on macOS 27, on the new Wine 11 engine r18 with Apple's D3DMetal 4, now also in an environment whose graphics mode you set by hand. This update also brings everything new since 0.10.3.</p><ul><li>Xbox Live games keep their sign-in on the Wine 11 engine.</li><li>Discord can show what you play. It is off by default, under Settings. Thanks to @matiasmg-ok.</li><li>The library opens on an Installed games row, and switching an engine shows what moves first. Thanks to @matiasmg-ok.</li><li>Steam libraries on another disk show up, games can be renamed, and linked game folders are recognised.</li><li>The EA app installs on the Wine 11 engine.</li><li>Data execution prevention stays on, which removes a Rosetta slowdown in Direct3D 9 games that stream vertices. Thanks to @athei.</li><li>Fewer crashes on the Wine 11 engine, and Highball always opens its window.</li></ul><p><a href="https://github.com/gauthierpiarrette/highball/releases/tag/v0.10.10">Full release notes</a></p>]]></description>
       <pubDate>Tue, 06 Oct 2026 11:33:22 +0200</pubDate>
