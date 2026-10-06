@@ -289,9 +289,29 @@ public struct WineRunner: Sendable {
         await syncEngineAppDefaults()
         await syncKeyboardRegistry()
         var note = headerNote
+        // External Mac drives get letters of their own, so Steam can offer them for a library.
+        // Windows lists drives through Wine's mount manager, which reads the links when the
+        // environment's server starts: a letter linked while the server ran stayed unlisted until
+        // the next start (measured 2026-10-06 with wmic). So an idle environment restarts, the way
+        // a stack mismatch restarts it below, and one running a program is left alone.
+        let linked = bottle.syncExternalDrives()
+        if !linked.isEmpty {
+            var text = "external drives linked: " + linked.map { "\($0.letter.uppercased()): \($0.path)" }.joined(separator: ", ")
+            if ProcessTable.liveServer(forPrefix: bottle.url) != nil {
+                if ProcessTable.isIdle(prefix: bottle.url) {
+                    _ = try kill()
+                    try? await Task.sleep(for: .seconds(2))
+                    text += "; restarted the idle environment so Windows lists them"
+                } else {
+                    text += "; Windows lists them after the environment's next start, a program is still running"
+                }
+            }
+            onOutput?("note: \(text)")
+            note = [note, text].compactMap { $0 }.joined(separator: "; ")
+        }
         if let rebooted = try await rebootIdleEnvironmentIfMismatched(renderer: renderer, extraEnvironment: extraEnvironment) {
             onOutput?("note: \(rebooted)")
-            note = [headerNote, rebooted].compactMap { $0 }.joined(separator: "; ")
+            note = [note, rebooted].compactMap { $0 }.joined(separator: "; ")
         }
         return try await run([executable.path] + arguments, renderer: renderer, extraEnvironment: extraEnvironment, label: executable.lastPathComponent, workingDirectory: workingDirectory, headerNote: note, onOutput: onOutput)
     }

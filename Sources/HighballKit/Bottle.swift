@@ -414,6 +414,9 @@ public struct BottleSettings: Codable, Sendable {
     /// link. Applied to the prefix by `UserFolders`; the saves go with the environment when it
     /// is deleted, and the delete confirmation says so.
     public var keepFilesInside: Bool = false
+    /// The drive letters Highball linked to external Mac drives (see `MacDrives`). A drive that is
+    /// away keeps its letter here, so it comes back the same and Steam finds its library again.
+    public var externalDrives: [MacDrives.Mapping] = []
     public var environment: [String: String] = [:]
     /// Variables a game's recipe sets for that one game's launches, keyed by the recipe's id (the
     /// db row's id). A recipe's environment step used to land in `environment` and reach every
@@ -425,7 +428,7 @@ public struct BottleSettings: Codable, Sendable {
     public var recipes: [String] = []
     public var created: Date = Date()
 
-    enum CodingKeys: String, CodingKey { case formatVersion, name, engineID, renderer, rendererExplicit, windowsVersion, sync, metalHUD, advertiseAVX, dxvkAsync, dlssEnabled, fpsCap, frameGen, frameGenAdaptive, frameGenFlowScale, frameGenPerformance, frameGenForceVsync, commandIsControl, commandIsControlSynced, dpiScale, retinaAt100, dllOverrides, dxvkAppConfig, dllOverridesSynced, engineAppDefaultsSynced, keepFilesInside, environment, gameEnvironment, pins, recipes, created }
+    enum CodingKeys: String, CodingKey { case formatVersion, name, engineID, renderer, rendererExplicit, windowsVersion, sync, metalHUD, advertiseAVX, dxvkAsync, dlssEnabled, fpsCap, frameGen, frameGenAdaptive, frameGenFlowScale, frameGenPerformance, frameGenForceVsync, commandIsControl, commandIsControlSynced, dpiScale, retinaAt100, dllOverrides, dxvkAppConfig, dllOverridesSynced, engineAppDefaultsSynced, keepFilesInside, externalDrives, environment, gameEnvironment, pins, recipes, created }
 
     /// The variables `gameID`'s recipe scoped to it; empty for a game without any, or with no id.
     public func environment(forGame gameID: String?) -> [String: String] {
@@ -480,6 +483,7 @@ public struct BottleSettings: Codable, Sendable {
         dllOverridesSynced = try c.decodeIfPresent(String.self, forKey: .dllOverridesSynced)
         engineAppDefaultsSynced = try c.decodeIfPresent(String.self, forKey: .engineAppDefaultsSynced)
         keepFilesInside = try c.decodeIfPresent(Bool.self, forKey: .keepFilesInside) ?? false
+        externalDrives = try c.decodeIfPresent([MacDrives.Mapping].self, forKey: .externalDrives) ?? []
         commandIsControl = try c.decodeIfPresent(Bool.self, forKey: .commandIsControl) ?? true
         commandIsControlSynced = try c.decodeIfPresent(Bool.self, forKey: .commandIsControlSynced)
         environment = try c.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
