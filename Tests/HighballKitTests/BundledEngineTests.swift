@@ -67,7 +67,8 @@ final class BundledEngineTests: XCTestCase {
     }
 
     /// r21 is r19 and r20 is r18 with the Wine rebuilt for patch 0020 (the Mac driver stops doubling
-    /// HORZRES and VERTRES in retina mode, highball#261) and the refreshed 0012, numbered the same
+    /// HORZRES and VERTRES in retina mode, highball#261), 0021 (GL_ARB_ES2_compatibility's calls in
+    /// legacy OpenGL contexts, highball-db#349) and the refreshed 0012, numbered the same
     /// way: the D3DMetal 4 one below, so every older plain pin is offered the D3DMetal 3 revision
     /// and Forza Horizon 6's pin on r18 is offered r20.
     func testR21AndR20AreR19AndR18WithTheRetinaFixedWine() throws {
