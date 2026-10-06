@@ -54,6 +54,26 @@ final class PEIconTests: XCTestCase {
         XCTAssertEqual(PEIcon.bestExecutable(in: dir)?.lastPathComponent, "start.exe")
     }
 
+    /// A game folder that is a symlink (a game moved to another disk and linked back) used to
+    /// enumerate as empty, so the program was never found (0.10.9 release pass, 2026-10-06).
+    func testAProgramIsFoundThroughASymlinkedGameFolderAndNamedUnderIt() throws {
+        let base = FileManager.default.temporaryDirectory.appending(path: "hb-exe-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let real = base.appending(path: "elsewhere/ForzaHorizon6")
+        try FileManager.default.createDirectory(at: real.appending(path: "bin"), withIntermediateDirectories: true)
+        try Data(count: 3000).write(to: real.appending(path: "bin/game.exe"))
+        try Data(count: 10).write(to: real.appending(path: "tool.exe"))
+        let common = base.appending(path: "steamapps/common")
+        try FileManager.default.createDirectory(at: common, withIntermediateDirectories: true)
+        let link = common.appending(path: "ForzaHorizon6")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        let found = try XCTUnwrap(PEIcon.bestExecutable(in: link), "nothing found through the link")
+        XCTAssertEqual(found.path, link.appending(path: "bin/game.exe").path, "named under the folder the caller gave")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: found.path))
+        // A plain folder is unchanged.
+        XCTAssertEqual(PEIcon.bestExecutable(in: real)?.path, real.appending(path: "bin/game.exe").path)
+    }
+
     func testARealProgramOnThisMacWhenThereIsOne() throws {
         let candidates = [
             "Library/Application Support/Highball/bottles/Gaming/drive_c/highball/ahk/AutoHotkeyU64.exe",

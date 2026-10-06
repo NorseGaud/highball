@@ -29,7 +29,13 @@ public enum PEIcon {
     static func bestExecutable(in dir: URL, maxLevel: Int) -> URL? {
         let fm = FileManager.default
         let excluded = ["unins", "setup", "redist", "crash", "report", "vc_redist", "vcredist", "dxsetup", "dotnet", "directx", "easyanticheat", "installscript", "launcher_", "helper"]
-        guard let e = fm.enumerator(at: dir, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey], options: [.skipsHiddenFiles]) else { return nil }
+        // A game folder that is itself a symlink (a game moved to another disk and linked back)
+        // enumerates as empty, so nothing was found for it: no icon, no per-program settings, no
+        // Direct3D 12 check (the 0.10.9 release pass, 2026-10-06, where Forza Horizon 6's folder in
+        // a test environment was a link). The walk runs in the resolved folder, and the program is
+        // named under the folder the caller gave, the path the environment itself uses.
+        let root = dir.resolvingSymlinksInPath()
+        guard let e = fm.enumerator(at: root, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey], options: [.skipsHiddenFiles]) else { return nil }
         var best: (URL, Int)?
         for case let url as URL in e {
             if e.level > maxLevel { e.skipDescendants(); continue }
@@ -39,7 +45,10 @@ public enum PEIcon {
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             if best == nil || size > best!.1 { best = (url, size) }
         }
-        return best?.0
+        guard let found = best?.0 else { return nil }
+        let base = root.standardizedFileURL.path, path = found.resolvingSymlinksInPath().standardizedFileURL.path
+        guard root != dir, path.hasPrefix(base + "/") else { return found }
+        return dir.appending(path: String(path.dropFirst(base.count + 1)))
     }
 
     // MARK: PE resources
