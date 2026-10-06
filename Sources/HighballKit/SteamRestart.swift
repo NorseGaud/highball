@@ -15,6 +15,18 @@ public enum SteamRestart {
     static let inherited: [(String, String)] = [("ROSETTA_ADVERTISE_AVX", "AVX advertised"), ("MTL_HUD_ENABLED", "the Metal HUD"),
                                                 ("CX_FWD_COMPAT_GL_CTX", "forward-compatible OpenGL contexts")]
 
+    /// The mode Steam's own window starts in, when it is not the one the shortcut would give it.
+    /// Steam's browser helpers cannot present under D3DMetal: its windows exist and stay black
+    /// (Wine 11 with D3DMetal 3, 2026-09-13, and with D3DMetal 4 on r18, 2026-10-05, measured), so a
+    /// player who set the environment to D3DMetal for a DirectX 12 game could not sign in or install
+    /// it (highball#268). DXMT draws the window on both engine lines. A mode set on the Steam
+    /// shortcut itself is the player's and stands. Play still gets the game's mode: a client that
+    /// differs is restarted before the launch (`restartSteamIfMismatched`).
+    public static func windowRenderer(shortcut: Renderer?, environment: Renderer, dxmtRuns: Bool) -> Renderer? {
+        guard shortcut == nil, environment == .d3dmetal, dxmtRuns else { return nil }
+        return .dxmt
+    }
+
     /// What became of the running client before a launch.
     public enum Outcome: Equatable {
         /// No client runs; the launch cold-starts one with its own environment.

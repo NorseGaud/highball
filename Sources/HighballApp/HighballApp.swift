@@ -251,6 +251,14 @@ struct ContentView: View {
             guard let bottle = state.bottles.first(where: { $0.name == String(spec[..<cut]) }) else { return }
             state.runDropped(URL(fileURLWithPath: String(spec[spec.index(after: cut)...])), in: bottle, andPin: false)
         }
+        // HB_DEBUG_STEAM="<environment>" opens that environment's Steam as its row's Show does,
+        // so a script can see which mode the window starts in (highball#268).
+        .task {
+            guard let name = ProcessInfo.processInfo.environment["HB_DEBUG_STEAM"] else { return }
+            try? await Task.sleep(for: .seconds(4))
+            guard let bottle = state.bottles.first(where: { $0.name == name }) else { return }
+            state.showSteam(in: bottle)
+        }
         // HB_DEBUG_PLAY="<library item id>" presses Play on that tile, so a script can capture
         // the questions Play asks (the engine ask, highball-db#318).
         .task {

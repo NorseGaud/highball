@@ -1710,11 +1710,14 @@ final class AppState {
             let runner = WineRunner(paths: paths, engine: engine, bottle: bottle)
             let url = Uninstall.steamURL(appID: appID)
             appendLog("\(item.title): asking Steam to uninstall it (\(url))")
+            // Its dialog has to be seen, so the client gets the mode its window draws in.
+            let mode = SteamRestart.windowRenderer(shortcut: nil, environment: bottle.settings.renderer,
+                                                   dxmtRuns: Renderer.dxmt.availability(in: engine) == .available)
             Task.detached {
                 // A running client takes the URL and shows its own dialog; with none running the
                 // client starts first, which is what `start` does with a steam:// argument.
                 if (try? await runner.forwardToRunningSteam([url])) == nil {
-                    _ = try? await runner.start(bottle.driveC.appending(path: "Program Files (x86)/Steam/steam.exe"), arguments: [url])
+                    _ = try? await runner.start(bottle.driveC.appending(path: "Program Files (x86)/Steam/steam.exe"), arguments: [url], renderer: mode)
                 }
             }
         case let .epic(appName):
@@ -2105,6 +2108,13 @@ final class AppState {
                 extraEnvironment = ["WINEMSYNC": "0", "WINEESYNC": "0"]
             }
             let extra = extraEnvironment
+            var started = pin
+            if isSteamUI(pin), let mode = SteamRestart.windowRenderer(shortcut: pin.renderer, environment: bottle.settings.renderer,
+                                                                      dxmtRuns: Renderer.dxmt.availability(in: engine) == .available) {
+                started.renderer = mode
+                await MainActor.run { self.appendLog("Steam's window opens with \(Renderer.displayName(mode)), since it stays black with D3DMetal. Games still start with D3DMetal.") }
+            }
+            let steamPin = started
             // The process outlives "starting": busy covers the start only, then the Steam row
             // (a client) or a session (anything else) carries it, and the app stays free (0.6).
             let box = LaunchOutcome()
@@ -2112,7 +2122,7 @@ final class AppState {
             let steamUI = isSteamUI(pin)
             watchedLaunch(box) {
                 if steamUI {
-                    let (r, resumed) = try await runner.startResumingKnownSteamCrash(pin: pin, extraEnvironment: extra) { line in
+                    let (r, resumed) = try await runner.startResumingKnownSteamCrash(pin: steamPin, extraEnvironment: extra) { line in
                         log(line)
                         if line.contains("relaunching so it resumes") {
                             Task { @MainActor in self.stage = L("Steam crashed at a known spot — relaunching to resume the update") }
