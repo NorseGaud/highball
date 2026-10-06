@@ -13,13 +13,15 @@ struct LibraryView: View {
     @Environment(AppState.self) private var state
     @Environment(\.openSettings) private var openSettings
     @State private var search = ""
-    @State private var sourceFilter: LibrarySource?
+    /// The chips stay as they were left: they reset on every start, which a player reported as a
+    /// bug (Discord, 2026-10-05, 0.10.8).
+    @AppStorage("library.sourceFilter") private var sourceFilter: LibrarySource?
     /// Off by default since the Home row (highball#252): installed games lead the screen in their
     /// own row, so the owned library below them is what the grid is for. On, it keeps every store
     /// to its installed games alike; it used to let Epic's owned games through until touched, and
     /// that read as a bug (highball#257).
-    @State private var installedOnly = false
-    @State private var verifiedOnly = false
+    @AppStorage("library.installedOnly") private var installedOnly = false
+    @AppStorage("library.verifiedOnly") private var verifiedOnly = false
 
     private var filtered: [LibraryItem] {
         state.libraryItems.filter { item in
@@ -232,7 +234,10 @@ struct LibraryTile: View {
                     CoverArt(item: item)
                         .saturation(blocked && !item.installedOnMac ? 0.15 : (item.installedAnywhere ? 1 : 0.45))
                         .brightness(item.installedAnywhere ? 0 : -0.08)
-                    if hovering && playable {
+                    // The hover Play of the grid. A Home row tile keeps its corner Play instead: the
+                    // button jumping from the corner to the middle under the pointer read as odd
+                    // (Discord, 2026-10-05).
+                    if hovering && playable && !playOnCover {
                         ZStack {
                             Color.black.opacity(0.25)
                             Button { hovering = false; state.play(item) } label: {
@@ -277,8 +282,8 @@ struct LibraryTile: View {
                         .padding(6)
                     }
                     // The visible Play of the Home row, bottom right, clear of the badge and of
-                    // the Running pill. The hover overlay above takes over while the pointer is in.
-                    if playOnCover && playable && !hovering && !isRunning {
+                    // the Running pill. It stays there while the pointer is in.
+                    if playOnCover && playable && !isRunning {
                         Button { state.play(item) } label: {
                             ZStack {
                                 Circle().fill(HB.amber).frame(width: 34, height: 34)
