@@ -346,7 +346,7 @@ struct GameDetailView: View {
                             HStack(alignment: .top, spacing: 12) {
                                 Text(L("Launch arguments")).font(.caption).foregroundStyle(.secondary).frame(width: 110, alignment: .leading).padding(.top, 4)
                                 VStack(alignment: .leading, spacing: 4) {
-                                    TextField("", text: $argsText, prompt: Text(verbatim: "-dx11 -windowed"))
+                                    TextField("", text: $argsText, prompt: Text(L("None")))
                                         .font(.body.monospaced()).frame(maxWidth: 360)
                                         .onSubmit { state.setLaunchArguments(argsText, for: item) }
                                     Text(L("Passed to the game on every Play from Highball, after any its fix adds. Quote arguments that contain spaces."))

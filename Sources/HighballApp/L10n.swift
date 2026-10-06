@@ -451,6 +451,7 @@ enum L10n {
         "Its anti-cheat does not run on macOS.": "Son anti-triche ne fonctionne pas sur macOS.",
         "Its publisher stops it on macOS on purpose.": "Son éditeur l'arrête volontairement sur macOS.",
         "Launch arguments": "Arguments de lancement",
+        "None": "Aucun",
         "New environment…": "Nouvel environnement…",
         "No row in the compatibility database yet.": "Pas encore d'entrée dans la base de compatibilité.",
         "No thanks": "Non merci",
