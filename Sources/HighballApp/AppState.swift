@@ -638,6 +638,7 @@ final class AppState {
     /// (issue #90). Same dialog as a dropped or chosen file: run it in the default environment,
     /// or run and keep it in Programs. Anything that is not a program says so instead of doing nothing.
     func openFile(_ url: URL) {
+        if Self.isDiscImage(url) { openDiscImage(url, in: nil); return }
         guard ["exe", "msi", "bat"].contains(url.pathExtension.lowercased()) else {
             fail(HighballError.failed(String(format: L("'%@' isn't a Windows program. Highball opens .exe, .msi and .bat files."), url.lastPathComponent)))
             return
@@ -652,9 +653,54 @@ final class AppState {
     func chooseProgramToRun(in bottle: String? = nil) {
         let panel = NSOpenPanel()
         panel.title = L("Choose a Windows program")
-        panel.allowedContentTypes = [.exe, .msi, .bat].compactMap { $0 }
+        panel.allowedContentTypes = [.exe, .msi, .bat, UTType(filenameExtension: "iso")].compactMap { $0 }
         panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url { pendingRunBottle = bottle; pendingRun = url }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if Self.isDiscImage(url) { openDiscImage(url, in: bottle); return }
+        pendingRunBottle = bottle; pendingRun = url
+    }
+
+    /// A disc image (.iso), as old games and their installers often come: Highball mounts it the
+    /// way a double-click in Finder would and asks for the program on it, then runs that like any
+    /// other (highball#184, a player dropped "Chrome (Poland).iso" and only got an error). Wine
+    /// sees the mounted disc under /Volumes like any other drive.
+    static func isDiscImage(_ url: URL) -> Bool { url.pathExtension.lowercased() == "iso" }
+
+    func openDiscImage(_ image: URL, in bottle: String?) {
+        Task { [weak self] in
+            let mounted = await Task.detached { () -> Result<URL, Error> in
+                do {
+                    let out = try Shell.capture("/usr/bin/hdiutil", ["attach", "-readonly", "-plist", image.path])
+                    // macOS 27 prints a deprecation warning before the plist on the same stream.
+                    let xml = out.range(of: "<?xml").map { String(out[$0.lowerBound...]) } ?? out
+                    guard let data = xml.data(using: .utf8),
+                          let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                          let entities = plist["system-entities"] as? [[String: Any]],
+                          let point = entities.compactMap({ $0["mount-point"] as? String }).first else {
+                        throw HighballError.failed(String(format: L("macOS could not open '%@' as a disc."), image.lastPathComponent))
+                    }
+                    return .success(URL(fileURLWithPath: point, isDirectory: true))
+                } catch { return .failure(error) }
+            }.value
+            await MainActor.run {
+                guard let self else { return }
+                switch mounted {
+                case let .failure(error): self.fail(error)
+                case let .success(disc):
+                    self.appendLog("mounted \(image.lastPathComponent) at \(disc.path)")
+                    let panel = NSOpenPanel()
+                    panel.title = L("Choose the program on the disc")
+                    panel.message = L("Usually the disc's setup or install program.")
+                    panel.directoryURL = disc
+                    panel.allowedContentTypes = [.exe, .msi, .bat].compactMap { $0 }
+                    panel.allowsMultipleSelection = false
+                    NSApp.activate(ignoringOtherApps: true)
+                    guard panel.runModal() == .OK, let program = panel.url else { return }
+                    self.pendingRunBottle = bottle
+                    self.pendingRun = program
+                }
+            }
+        }
     }
 
     let paths = HighballPaths()
@@ -1542,6 +1588,11 @@ final class AppState {
         let reg = bottle.url.appending(path: "user.reg")
         let modified = (try? reg.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
         let key = bottle.name + "|" + exe.lastPathComponent
+        // A write made while the environment runs sits in Wine's server until it saves user.reg,
+        // seconds later or at exit, so the file still says off and the box sprang back
+        // unchecked (highball-db#350: "it doesn't let me check the box"). What was just written
+        // stands until the file is newer than the write.
+        if let written = displayModeWritten[key], written.at > modified { return written.on }
         if let hit = displayModeCache[key], hit.modified == modified { return hit.on }
         let on = DisplayModeEmulation.isOn(in: bottle, executable: exe)
         displayModeCache[key] = (modified, on)
@@ -1552,14 +1603,19 @@ final class AppState {
               let exe = programExecutable(for: item) else { return nil }
         return displayModeEmulation(in: bottle, executable: exe)
     }
+    @ObservationIgnored private var displayModeWritten: [String: (on: Bool, at: Date)] = [:]
     func setDisplayModeEmulation(_ on: Bool, in bottle: Bottle, executable exe: URL) {
         guard let engine = engine(for: bottle) else { return }
+        let key = bottle.name + "|" + exe.lastPathComponent
+        displayModeWritten[key] = (on, Date())
+        registryVersion += 1
         Task { @MainActor in
             let runner = WineRunner(paths: paths, engine: engine, bottle: bottle)
             do {
                 try await DisplayModeEmulation.set(on, in: runner, executable: exe)
                 appendLog("\(exe.lastPathComponent): emulated display mode changes \(on ? "on" : "off") in \(bottle.name); the next launch uses it.")
             } catch {
+                displayModeWritten[key] = nil
                 fail(error, bottle: bottle)
             }
             registryVersion += 1

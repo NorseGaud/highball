@@ -201,6 +201,8 @@ struct ContentView: View {
                 guard let url else { return }
                 if ["exe", "msi", "bat"].contains(url.pathExtension.lowercased()) {
                     Task { @MainActor in state.pendingRunBottle = nil; state.pendingRun = url }
+                } else if AppState.isDiscImage(url) {
+                    Task { @MainActor in state.openDiscImage(url, in: nil) }
                 } else {
                     Task { @MainActor in
                         state.fail(HighballError.failed(String(format: L("'%@' isn't a Windows program. You can drop .exe, .msi or .bat files here."), url.lastPathComponent)))

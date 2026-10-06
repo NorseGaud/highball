@@ -342,7 +342,33 @@ struct GameDetailView: View {
                                 }
                             }
                         }
-                        row(L("Engine"), (state.engine(for: bottle)?.displayName).map { "\($0) · \(bottle.settings.engineID)" } ?? bottle.settings.engineID)
+                        // The engine is the environment's, so the page says so and can change it
+                        // through the same switch page as the environment's settings, which lists
+                        // every program that moves along (highball#262: an engine shown here that
+                        // could not be changed read as a dead end).
+                        let offered = state.offeredEngines(for: bottle)
+                        HStack(alignment: .top, spacing: 12) {
+                            Text(L("Engine")).font(.caption).foregroundStyle(.secondary).frame(width: 110, alignment: .leading).padding(.top, offered.count > 1 ? 4 : 0)
+                            VStack(alignment: .leading, spacing: 4) {
+                                if offered.count > 1 {
+                                    Picker("", selection: Binding(
+                                        get: { bottle.settings.engineID },
+                                        set: { newID in
+                                            guard newID != bottle.settings.engineID else { return }
+                                            state.engineTransition = AppState.EngineTransition(bottleName: bottle.name, targetID: newID)
+                                        })) {
+                                        ForEach(offered, id: \.id) { e in
+                                            Text(verbatim: e.missing ? "\(e.id) (\(L("missing")))" : e.installed ? e.id : "\(e.id) (\(L("download")))").tag(e.id)
+                                        }
+                                    }.labelsHidden().frame(maxWidth: 360).disabled(state.busy)
+                                } else {
+                                    Text(verbatim: (state.engine(for: bottle)?.displayName).map { "\($0) · \(bottle.settings.engineID)" } ?? bottle.settings.engineID)
+                                        .font(.callout)
+                                }
+                                Text(String(format: L("The engine belongs to the environment '%@', so a change here applies to every game in it. The page that opens lists them before anything moves."), bottle.name))
+                                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                         // Variables a fix scoped to this game (highball#198): the environment's own
                         // editor shows only the environment-wide ones, so the page says what this
                         // game gets on top of them.

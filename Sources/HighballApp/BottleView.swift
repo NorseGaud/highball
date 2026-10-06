@@ -89,6 +89,8 @@ struct BottleView: View {
                 guard let url else { return }
                 if ["exe", "msi", "bat"].contains(url.pathExtension.lowercased()) {
                     Task { @MainActor in state.pendingRunBottle = bottle.name; state.pendingRun = url }
+                } else if AppState.isDiscImage(url) {
+                    Task { @MainActor in state.openDiscImage(url, in: bottle.name) }
                 } else {
                     // Silently ignoring a drop reads as "nothing happened" (Reddit report) — say why.
                     Task { @MainActor in
