@@ -11,6 +11,27 @@ public struct LaunchResult: Sendable {
     public var crashedEarly: Bool { duration < 10 && exitStatus != 0 }
 }
 
+/// Windows face names that macOS installs under a different family name. GDI+ looks up the
+/// Windows name and draws no text when the family is missing. The prefix stores the map in
+/// `HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontSubstitutes`.
+public enum MacFontSubstitutes {
+    public static let registryKey = #"HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontSubstitutes"#
+    /// Key text as `system.reg` writes it.
+    static let fileKey = #"Software\Microsoft\Windows NT\CurrentVersion\FontSubstitutes"#
+    /// Palatino Linotype is the Windows name. macOS ships that family as Palatino.
+    public static let pairs: [(windowsName: String, macName: String)] = [
+        ("Palatino Linotype", "Palatino"),
+    ]
+
+    /// Pairs whose Windows name has no value yet. A value already stored is left as it is,
+    /// including one a player or a recipe set to another face.
+    public static func missing(in systemReg: String) -> [(windowsName: String, macName: String)] {
+        pairs.filter { pair in
+            RegistryText.value(in: systemReg, key: fileKey, name: pair.windowsName) == nil
+        }
+    }
+}
+
 /// Launches Wine processes for a bottle and captures their output to `logs/`.
 public struct WineRunner: Sendable {
     public let paths: HighballPaths
@@ -263,6 +284,7 @@ public struct WineRunner: Sendable {
     /// everything it and its children print lands in the log. The call returns when the program exits.
     @discardableResult
     public func start(_ executable: URL, arguments: [String] = [], renderer: Renderer? = nil, extraEnvironment: [String: String] = [:], workingDirectory: URL? = nil, headerNote: String? = nil, onOutput: (@Sendable (String) -> Void)? = nil) async throws -> LaunchResult {
+        await syncMacFontSubstitutes()
         await syncDllOverridesRegistry()
         await syncEngineAppDefaults()
         await syncKeyboardRegistry()
@@ -538,6 +560,19 @@ public struct WineRunner: Sendable {
     }
 
     static let dllOverridesKey = #"HKCU\Software\Wine\DllOverrides"#
+
+    /// Writes the Mac font names that stand in for Windows face names. One write per name that
+    /// has no value yet, then nothing: a value already stored is kept. The prefix registry is
+    /// what every later process reads, including a game that an already-running Steam starts.
+    /// `start` calls this. A registry file that does not exist yet (a bottle still in its first
+    /// boot) is left alone.
+    func syncMacFontSubstitutes() async {
+        let regURL = bottle.url.appending(path: "system.reg")
+        guard let text = try? String(contentsOf: regURL, encoding: .utf8) else { return }
+        for pair in MacFontSubstitutes.missing(in: text) {
+            try? await regAdd(key: MacFontSubstitutes.registryKey, name: pair.windowsName, type: "REG_SZ", data: pair.macName)
+        }
+    }
 
     /// Mirrors the bottle's DLL-overrides field into the prefix registry. The env var reaches only
     /// process trees Highball spawns itself; a game launched through an already-running Steam client

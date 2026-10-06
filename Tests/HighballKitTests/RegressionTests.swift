@@ -1517,6 +1517,26 @@ extension RegressionTests {
         XCTAssertEqual(WineRunner.exitCodeNote(for: 67), "")
     }
 
+    func testMacFontSubstituteFillsOnlyAMissingWindowsName() {
+        let bare = """
+        [Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\FontSubstitutes] 1
+        "Helvetica"="Arial"
+        """
+        XCTAssertEqual(MacFontSubstitutes.missing(in: bare).map(\.windowsName), ["Palatino Linotype"])
+
+        let mapped = """
+        [Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\FontSubstitutes] 1
+        "Palatino Linotype"="Palatino"
+        """
+        XCTAssertTrue(MacFontSubstitutes.missing(in: mapped).isEmpty)
+
+        let other = """
+        [Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\FontSubstitutes] 1
+        "Palatino Linotype"="Times New Roman"
+        """
+        XCTAssertTrue(MacFontSubstitutes.missing(in: other).isEmpty)
+    }
+
     // Play-gate: only provably harmless steps may run silently at Play (no wine process —
     // the msync trap #32 — and no long installs). Heavy or wine-touching steps must prompt.
     func testRecipeAutoApplyClassification() throws {
