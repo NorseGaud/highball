@@ -23,10 +23,11 @@ public enum MacFontSubstitutes {
         ("Palatino Linotype", "Palatino"),
     ]
 
-    /// Pairs whose Windows name is absent or points somewhere else.
+    /// Pairs whose Windows name has no value yet. A value already stored is left as it is,
+    /// including one a player or a recipe set to another face.
     public static func missing(in systemReg: String) -> [(windowsName: String, macName: String)] {
         pairs.filter { pair in
-            RegistryText.value(in: systemReg, key: fileKey, name: pair.windowsName) != "\"\(pair.macName)\""
+            RegistryText.value(in: systemReg, key: fileKey, name: pair.windowsName) == nil
         }
     }
 }
@@ -560,10 +561,11 @@ public struct WineRunner: Sendable {
 
     static let dllOverridesKey = #"HKCU\Software\Wine\DllOverrides"#
 
-    /// Writes the Mac font names that stand in for Windows face names. One write per missing
-    /// name, then nothing: the prefix registry is what every later process reads, including a
-    /// game that an already-running Steam starts. `start` calls this. A registry file that does
-    /// not exist yet (a bottle still in its first boot) is left alone.
+    /// Writes the Mac font names that stand in for Windows face names. One write per name that
+    /// has no value yet, then nothing: a value already stored is kept. The prefix registry is
+    /// what every later process reads, including a game that an already-running Steam starts.
+    /// `start` calls this. A registry file that does not exist yet (a bottle still in its first
+    /// boot) is left alone.
     func syncMacFontSubstitutes() async {
         let regURL = bottle.url.appending(path: "system.reg")
         guard let text = try? String(contentsOf: regURL, encoding: .utf8) else { return }

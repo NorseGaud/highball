@@ -1534,7 +1534,7 @@ extension RegressionTests {
         [Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\FontSubstitutes] 1
         "Palatino Linotype"="Times New Roman"
         """
-        XCTAssertEqual(MacFontSubstitutes.missing(in: other).map(\.macName), ["Palatino"])
+        XCTAssertTrue(MacFontSubstitutes.missing(in: other).isEmpty)
     }
 
     // Play-gate: only provably harmless steps may run silently at Play (no wine process —
