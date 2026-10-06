@@ -5,9 +5,13 @@
 #        Scripts/release.sh --promote 0.3.1     (beta -> stable, phased over seven days)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# Every path below ends in a plain `git push` of the branch. On a detached HEAD that push fails
-# after the build and notarization have run (0.10.9, 2026-10-06), so say it before anything starts.
-git symbolic-ref -q HEAD >/dev/null || { echo "release.sh: HEAD is detached. Check out a branch that tracks origin/main first (in rel/gin-release: git checkout -B release-0.10.5 origin/main)" >&2; exit 1; }
+# Every push below names origin's main, where the appcast is served from. A plain `git push`
+# failed on a detached HEAD after the build and notarization had run (0.10.9), and `git push
+# origin HEAD` from a release worktree's own branch would have made a new branch of that name
+# instead of updating main (seen in a dry run before 0.10.11, 2026-10-06). The pushes are refused
+# when HEAD does not contain origin/main, so check that before anything starts.
+git fetch -q origin main || { echo "release.sh: cannot fetch origin main" >&2; exit 1; }
+git merge-base --is-ancestor origin/main HEAD || { echo "release.sh: HEAD does not contain origin/main. Rebase onto it and run Scripts/gate.sh again" >&2; exit 1; }
 # Channels (2026-09-07): a normal release goes to beta first (`--beta`), then `--promote <version>`
 # turns the same signed artifact into a stable, phased rollout by editing the appcast: no rebuild,
 # so what testers ran is byte for byte what everyone gets. `--hotfix` is stable at once, no phasing.
@@ -50,7 +54,7 @@ xml.dom.minidom.parse('appcast.xml')
 print(f'appcast: {v} promoted to stable, phased over seven days from now')
 PY
     gh release edit "v$PV" --prerelease=false --latest --title "Highball $PV"
-    git add appcast.xml && git commit -m "release: promote v$PV to stable" && git push
+    git add appcast.xml && git commit -m "release: promote v$PV to stable" && git push origin "HEAD:refs/heads/main"
     echo "promoted v$PV"
     exit 0 ;;
 esac
@@ -208,7 +212,7 @@ xcrun stapler staple "$DMG"
 # without an existing tag, gh tags the REMOTE default-branch head, which mislabeled
 # v0.7.8 (local fix commits weren't pushed yet, so the tag landed on the v0.7.7 commit).
 git tag "v$VERSION"
-git push origin HEAD "v$VERSION"
+git push origin "HEAD:refs/heads/main" "v$VERSION"
 
 # Publishing is one GitHub call that can fail on a network blip after the tag is already pushed
 # (0.8.2: a read error on the final PATCH left a tag with no release and no appcast). Retry, and if
@@ -235,7 +239,7 @@ done
 # The assets exist only once the release is published; do not point the appcast at them before.
 gh release view "v$VERSION" --json isDraft --jq '.isDraft' | grep -q false
 
-git add appcast.xml && git commit -m "release: v$VERSION appcast" && git push
+git add appcast.xml && git commit -m "release: v$VERSION appcast" && git push origin "HEAD:refs/heads/main"
 
 # GitHub's asset CDN lags the upload by a few seconds: wait until the zip downloads at full size.
 for i in $(seq 1 24); do

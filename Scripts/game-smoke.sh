@@ -94,7 +94,19 @@ for row in "${GAMES[@]}"; do
         [ -n "$gw" ] && sips --cropOffset $((gy*2)) $((gx*2)) -c $((gh*2)) $((gw*2)) "$OUT/.fs.png" --out "$out" >/dev/null 2>&1
       fi; }
     sleep 40; h=(); for k in 1 2 3; do grab "$OUT/$name-$k.png"; h+=("$(md5 -q "$OUT/$name-$k.png" 2>/dev/null)"); sleep 10; done
-    crash=$("$WINLIST" 2>/dev/null | grep -iE 'Program Error|Wine Debugger' | grep -c on=true)
+    # Only a crash dialog from this row's environment counts. Other sessions run Wine on this Mac
+    # too: on 2026-10-06 a dialog from another environment failed The Sims while its three
+    # captures showed the game drawing, and the row passed on its own re-run. The dialog's owner
+    # (winedbg, started in the crashing program's environment) carries WINEPREFIX; a dialog whose
+    # environment cannot be read still counts.
+    crash=0
+    for cpid in $("$WINLIST" 2>/dev/null | grep -iE 'Program Error|Wine Debugger' | grep on=true | grep -oE 'pid=[0-9]+' | cut -d= -f2); do
+      cenv=$(ps -E -p "$cpid" -o command= 2>/dev/null)
+      if [[ "$cenv" == *"WINEPREFIX="* && "$cenv" != *"WINEPREFIX=$H/bottles/$bottle "* && "$cenv" != *"WINEPREFIX=$H/bottles/$bottle" ]]; then
+        echo "  (a crash dialog from another environment, pid $cpid, not counted)"; continue
+      fi
+      crash=$((crash + 1))
+    done
     if [ "$crash" -gt 0 ]; then echo "  FAIL: crash dialog"; results+=("{\"appid\":$appid,\"name\":\"$name\",\"result\":\"crash dialog\"}"); passed=false
     elif [ "${h[1]}" = "${h[2]}" ] && [ "${h[2]}" = "${h[3]}" ]; then
       # Identical captures also come from a still picture that is drawn every frame (The Last
