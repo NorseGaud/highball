@@ -7,9 +7,9 @@
     <item>
       <title>Highball 0.10.10</title>
       <description><![CDATA[Forza Horizon 6 on environments with a hand-set graphics mode, linked game folders, the engine question offers an environment already on the engine]]></description>
-      <pubDate>Tue, 06 Oct 2026 11:23:13 +0200</pubDate>
+      <pubDate>Tue, 06 Oct 2026 11:33:22 +0200</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>beta</sparkle:channel>
+      <sparkle:phasedRolloutInterval>86400</sparkle:phasedRolloutInterval>
       <enclosure url="https://github.com/gauthierpiarrette/highball/releases/download/v0.10.10/Highball-0.10.10.zip" sparkle:version="0.10.10" sparkle:shortVersionString="0.10.10" sparkle:edSignature="M8B3mGGpk0CYHJY3MGu6BnDrRt0G/BpBHHYePNVdOulHBrvVTnYmLpcwQuD4kt8arUGMRdM5zIF8KXFKQpZ0CA==" length="4582957" type="application/octet-stream"/>
     </item>
     <item>
