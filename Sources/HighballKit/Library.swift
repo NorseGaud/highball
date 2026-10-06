@@ -102,7 +102,8 @@ public enum LibraryIndex {
                              epicOwned: [EpicStore.Game],
                              epicInstalls: [String: String],
                              plays: [String: LibraryStore.PlayRecord] = [:],
-                             defaultBottle: String? = nil) -> [LibraryItem] {
+                             defaultBottle: String? = nil,
+                             pinExists: (Bottle, Pin) -> Bool = { _, _ in true }) -> [LibraryItem] {
         var items: [LibraryItem] = []
         let onMac = Dictionary(macInstalled.map { ($0.appid, $0) }, uniquingKeysWith: { a, _ in a })
         // Where a game with no other reason to live somewhere goes: the default environment first,
@@ -183,13 +184,16 @@ public enum LibraryIndex {
                 lastPlayed: plays[id]?.lastPlayedAt))
         }
 
-        // Custom pins (dropped exes, preinstalled games) — always installed, no artwork.
+        // Custom pins (dropped exes, preinstalled games), no artwork. Installed when the program's
+        // file is there: one on a drive that is unplugged, or deleted since, is not (highball#269,
+        // the Installed filter kept listing them). `pinExists` is the app's check of the disk;
+        // without one every pin counts, so the index stays testable without a filesystem.
         for bottle in bottles {
             for pin in bottle.settings.pins where !isLauncherPin(pin) {
                 let id = "pin:\(bottle.name):\(pin.id.uuidString)"
                 items.append(LibraryItem(
                     source: .pin, id: id, title: pin.name, bottleName: bottle.name,
-                    installed: true, pinID: pin.id,
+                    installed: pinExists(bottle, pin), pinID: pin.id,
                     lastPlayed: plays[id]?.lastPlayedAt))
             }
         }

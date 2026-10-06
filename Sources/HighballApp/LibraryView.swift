@@ -262,10 +262,19 @@ struct LibraryTile: View {
                             .padding(6)
                     }
                     if !item.installedAnywhere {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .foregroundStyle(.white.opacity(0.85))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                            .padding(6)
+                        // A program you added whose file is gone has nothing to download: say so
+                        // instead (highball#269).
+                        Group {
+                            if item.source == .pin {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .help(L("This program's file isn't there. Plug in the drive it is on, or remove it from the environment's programs."))
+                            } else {
+                                Image(systemName: "arrow.down.circle.fill")
+                            }
+                        }
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(6)
                     }
                     // The visible Play of the Home row, bottom right, clear of the badge and of
                     // the Running pill. The hover overlay above takes over while the pointer is in.

@@ -97,4 +97,19 @@ final class EnvironmentCopiesTests: XCTestCase {
         let first = EnvironmentFit.Candidate(name: "A", holdsGame: false, hasFix: true)
         XCTAssertEqual(EnvironmentFit.best([first, fix])?.name, "A", "ties keep the app's order")
     }
+
+    // MARK: A program whose file is gone
+
+    func testAProgramWhoseFileIsGoneIsNotInstalled() {
+        var games = bottle("Games")
+        let here = Pin(name: "Here", path: "Games/here.exe")
+        let gone = Pin(name: "GTA V", path: "/Volumes/MEDIA_DEV/roms/windows/Grand Theft Auto V.pc/PlayGTAV.exe")
+        games.settings.pins = [here, gone]
+        let items = LibraryIndex.build(bottles: [games], steamByBottle: [:], epicOwned: [], epicInstalls: [:],
+                                       pinExists: { _, pin in pin.id == here.id })
+        XCTAssertEqual(items.first { $0.pinID == here.id }?.installed, true)
+        XCTAssertEqual(items.first { $0.pinID == gone.id }?.installed, false, "the Installed filter hides it (highball#269)")
+        let unchecked = LibraryIndex.build(bottles: [games], steamByBottle: [:], epicOwned: [], epicInstalls: [:])
+        XCTAssertTrue(unchecked.filter { $0.source == .pin }.allSatisfy(\.installed), "without a check every program counts, as before")
+    }
 }

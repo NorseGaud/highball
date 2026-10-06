@@ -522,6 +522,7 @@ enum L10n {
         // An environment that already fits a game's engine, and the windows Highball brings forward (highball-db#318, highball#264)
         "%d installed": "%d installés",
         "Play there": "Y jouer",
+        "This program's file isn't there. Plug in the drive it is on, or remove it from the environment's programs.": "Le fichier de ce programme est introuvable. Branchez le disque où il se trouve, ou retirez-le des programmes de l'environnement.",
         "Use '%@'": "Utiliser « %@ »",
         "'%@' is already on the %@ engine and has the game installed, so it plays there. This environment stays as it is.": "« %@ » utilise déjà le moteur %@ et le jeu y est installé, il s'y lance donc. Cet environnement reste tel quel.",
         "'%@' is already on the %@ engine. Using it installs the game there, with what it needs, and this environment stays as it is.": "« %@ » utilise déjà le moteur %@. L'utiliser y installe le jeu, avec ce qu'il lui faut, et cet environnement reste tel quel.",

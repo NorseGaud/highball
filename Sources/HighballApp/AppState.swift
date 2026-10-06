@@ -249,7 +249,11 @@ final class AppState {
         libraryItems = LibraryIndex.build(bottles: bottles, steamByBottle: gamesByBottle,
                                           steamOwnedByBottle: steamOwnedByBottle, macInstalled: macSteamGames,
                                           epicOwned: epicOwned, epicInstalls: epicInstalls,
-                                          plays: libraryPlays, defaultBottle: defaultBottle?.name)
+                                          plays: libraryPlays, defaultBottle: defaultBottle?.name,
+                                          pinExists: { bottle, pin in
+                                              // follows links, so a link to a file that is gone counts as missing
+                                              FileManager.default.fileExists(atPath: pin.executableURL(driveC: bottle.driveC).path)
+                                          })
         sortLibraryByDisplayTitle()
         if let deferred = deferredPlayLink { resolvePlayLink(deferred.request) }
         refreshMacFlags()
