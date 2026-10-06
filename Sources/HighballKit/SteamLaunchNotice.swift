@@ -1,6 +1,6 @@
 import Foundation
 
-/// Steam's "controller recommended" notice, which a D3DMetal launch cannot show.
+/// Steam's pre-launch notices, such as "controller recommended", which a D3DMetal launch cannot show.
 ///
 /// Before the first start of a game tagged "gamepad recommended", Steam's launch stops at
 /// `ShowInterstitials` and its web UI draws a notice saying a controller is recommended. Once it
@@ -22,14 +22,43 @@ import Foundation
 /// as seen before a D3DMetal launch takes nothing away. Steam keeps the file in memory while it
 /// runs and writes it back on exit, so this has to happen while no client runs: the caller
 /// does it right before a cold start.
+///
+/// "Controller recommended" is one of several such notices, and which one Steam shows depends on
+/// the Mac. With a DualSense connected, Forza Horizon 6 never started on an M5 Max: Steam's
+/// console_log.txt stopped at "waiting for user response to ShowInterstitials" on every Play
+/// (2026-10-06, Steam client 1788652215). With a PlayStation controller Steam asks whether to use
+/// Steam Input for it (CurrentGamepadSteamInputOptIn) instead, and the M4 these launches were
+/// verified on has no controller. So every notice Steam can record as seen is recorded, each the
+/// way the client's own MarkInterstitialSeen does it.
 public enum SteamLaunchNotice {
-    static let appsKey = "Deck_ConfiguratorInterstitialApps_GamepadRecommended"
-    static let fixedKeys = [("Deck_ConfiguratorInterstitialsVersionSeen_GamepadRecommended", "1"),
-                            ("Deck_ConfiguratorInterstitialsCheckbox_GamepadRecommended", "0")]
+    /// Steam's pre-launch notices, its "ConfiguratorInterstitials", as client 1788652215 defines
+    /// them in steamui: the name in their storage keys, whether Steam asks once per game (an apps
+    /// list and a "don't show again" checkbox) or once for every game, and the version it compares
+    /// the stored one against (shown again when the stored one is lower). Two more ask every time
+    /// (GamepadRequired, VRRequired) and keep nothing that could be recorded.
+    static let notices: [(name: String, perGame: Bool, version: Int)] = [
+        ("GamepadRecommended", true, 1),
+        ("CurrentGamepadSteamInputOptIn", true, 1),
+        ("CurrentGamepadUnsupported", true, 1),
+        ("AppTextInputDoesNotAutomaticallyInvokesKeyboard", true, 1),
+        ("AppLauncherInteractionIssues", true, 1),
+        ("AppHasSmallText", true, 1),
+        ("IntroToVRTheater", true, 1),
+        ("HDRRequiresUserAction", true, 1),
+        ("UnclaimedEntitlement", true, 1),
+        ("Intro", false, 3),
+        ("NonVerifiedGame", false, 5),
+        ("Gyro", false, 4),
+        ("RemotePlayConfirm", false, 3),
+        ("ExternalControllersAndSIAPI", false, 1),
+        ("IntroToActionSets", false, 1),
+        ("IntroToSteamInputGames", false, 1),
+    ]
 
-    /// Pure: the text of a `localconfig.vdf` with the notice recorded as seen for `appID`, or nil
-    /// when nothing needs to change or the file has no `WebStorage` block to put it in (a client
-    /// that has never shown its web UI; nothing is invented then).
+    /// Pure: the text of a `localconfig.vdf` with every notice recorded as seen for `appID`, or
+    /// nil when nothing needs to change or the file has no `WebStorage` block to put it in (a
+    /// client that has never shown its web UI; nothing is invented then). A version below Steam's
+    /// is raised, a "don't show again" the player ticked stays.
     public static func markingSeen(in text: String, appID: Int) -> String? {
         let crlf = text.contains("\r\n")
         var lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
@@ -45,26 +74,31 @@ public enum SteamLaunchNotice {
         }
         func line(_ key: String, _ value: String) -> String { "\t\t\"\(key)\"\t\t\"\(value)\"" }
         var changed = false
-        if let i = (ws + 2..<end).first(where: { pair(lines[$0])?.key == appsKey }) {
-            let current = pair(lines[i])?.value ?? "[]"
-            var apps = (try? JSONDecoder().decode([Int].self, from: Data(current.utf8))) ?? []
+        func index(of key: String) -> Int? { (ws + 2..<end).first(where: { pair(lines[$0])?.key == key }) }
+        func value(of key: String) -> String? { index(of: key).flatMap { pair(lines[$0])?.value } }
+        func set(_ key: String, _ value: String) {
+            if let i = index(of: key) { lines[i] = line(key, value) } else { lines.insert(line(key, value), at: end); end += 1 }
+            changed = true
+        }
+        for notice in notices {
+            let seenKey = "Deck_ConfiguratorInterstitialsVersionSeen_" + notice.name
+            if (value(of: seenKey).flatMap { Int($0) } ?? 0) < notice.version { set(seenKey, String(notice.version)) }
+            guard notice.perGame else { continue }
+            let checkboxKey = "Deck_ConfiguratorInterstitialsCheckbox_" + notice.name
+            if index(of: checkboxKey) == nil { set(checkboxKey, "0") }
+            let appsKey = "Deck_ConfiguratorInterstitialApps_" + notice.name
+            var apps = value(of: appsKey).flatMap { try? JSONDecoder().decode([Int].self, from: Data($0.utf8)) } ?? []
             if !apps.contains(appID) {
                 apps.append(appID)
-                lines[i] = line(appsKey, "[" + apps.map(String.init).joined(separator: ",") + "]")
-                changed = true
+                set(appsKey, "[" + apps.map(String.init).joined(separator: ",") + "]")
             }
-        } else {
-            lines.insert(line(appsKey, "[\(appID)]"), at: end); end += 1; changed = true
-        }
-        for (key, value) in fixedKeys where !(ws + 2..<end).contains(where: { pair(lines[$0])?.key == key }) {
-            lines.insert(line(key, value), at: end); end += 1; changed = true
         }
         guard changed else { return nil }
         let joined = lines.joined(separator: "\n")
         return crlf ? joined.replacingOccurrences(of: "\n", with: "\r\n") : joined
     }
 
-    /// Records the notice as seen for `appID` in every Steam user's `localconfig.vdf` under
+    /// Records the notices as seen for `appID` in every Steam user's `localconfig.vdf` under
     /// `steamRoot`. Call it only while no Steam client runs in the environment. Returns how many
     /// files changed.
     @discardableResult

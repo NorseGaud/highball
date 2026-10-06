@@ -2330,13 +2330,14 @@ final class AppState {
             case .noClient, .serves:
                 break
             }
-            // A client on the D3DMetal stack cannot draw Steam's "controller recommended" notice, so
-            // a first launch would wait on it for good. No client runs at this point when the launch
-            // cold-starts one, which is when the record can be written (see SteamLaunchNotice).
+            // A client on the D3DMetal stack cannot draw Steam's pre-launch notices ("controller
+            // recommended", the Steam Input question a PlayStation controller brings), so a launch
+            // would wait on one for good. No client runs at this point when the launch cold-starts
+            // one, which is when the record can be written (see SteamLaunchNotice).
             if served == .d3dmetal, runner.runningSteamEnvironment() == nil {
                 let root = bottle.driveC.appending(path: "Program Files (x86)/Steam")
                 if SteamLaunchNotice.markSeen(steamRoot: root, appID: game.appid) > 0 {
-                    await MainActor.run { self.appendLog("Recorded Steam's controller notice for \(game.name) as seen: Steam cannot show it in D3DMetal mode.") }
+                    await MainActor.run { self.appendLog("Recorded Steam's pre-launch notices for \(game.name) as seen: Steam cannot show them in D3DMetal mode.") }
                 }
             }
             let note = headerNote, servedRenderer = served
