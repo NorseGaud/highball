@@ -1,14 +1,13 @@
 {
   "$schema": "https://highball.app/schemas/engine-manifest/v0",
-  "id": "x64-sikarugir10.0_6-r22",
-  "displayName": "Wine 10.0 (Sikarugir) r22",
+  "id": "x64-sikarugir10.0_6-r21",
+  "displayName": "Wine 10.0 (Sikarugir) r21",
   "arch": "x86_64",
   "minMacOS": "14.0",
   "requires": [
     "rosetta2"
   ],
   "notes": [
-    "r22 (2026-10-06): r21 with the Mac driver's retina screen size fixed (winemac component). Retina resolution on, the Mac driver reported HORZRES and VERTRES twice the screen size that GetSystemMetrics, EnumDisplaySettings and DESKTOPHORZRES report (6912x4468 against 3456x2234 on an M1 Pro, 7680x4320 against 3840x2160 on an M4's 1920x1080 display), so a game sizing its window or its fullscreen picture from them got it twice too large: Team Fortress 2 placed its window off screen (athei), and Red Dead Redemption 2's 1080p fullscreen came out cropped for a player with Retina on (highball#261). With retina off the doubling shift was by zero, so nothing changes there. Every other component is byte-identical, so only the 160 KB winemac archive is new.",
     "r21 (2026-10-03): r19 plus the data execution prevention edit to ntdll.so (see the ntdll-unix component), the Wine 10 counterpart of the Wine 11 engine's r17. Every other file is byte-identical to r19.",
     "r19 (2026-10-01): r17 plus the audio buffer library (audiobuf component, highball#127). At 48 kHz the Mac asked Wine's audio driver for 10.7 ms at a time, more than a game that keeps one 10 ms period queued has, and the driver played the shortfall as silence. Measured on an M4 with macOS 27.0 with raw captures of each game's menu music: Counter-Strike 2 went from 324 dropouts in two minutes to none, and Half-Life 2, Among Us and Five Nights at Freddy's had none either way. The cap is per process, so other apps keep their audio as it was. Every other component is byte-identical to r17, so only a 2 KB archive is new.",
     "r17 (2026-10-01): r15 with msync's registration leak fixed (wineserver and ntdll-unix components, highball#224). A wait on several objects that lost a race left the thread registered in the wineserver and nothing removed it, so an object that is rarely signaled gained a list node each time: the pool ran out (\"msync: warn: node memory pool exhausted\" on every allocation after that) and the wineserver grew for as long as the game ran. Measured on an M4 with macOS 27.0 with a reproducer (a worker sets an auto-reset event in a loop while the main thread waits on two objects): r15's wineserver went from 19 MB to 83 MB in 30 s with the pool exhausted, with these two files it stayed at 17 MB with no warning and waits ran faster (about 979k a second against 596k). Heartopia (90 s) and Five Nights at Freddy's (60 s, 32-bit) ran under msync on it with a steady wineserver. Every other component is byte-identical to r15, so only a 435 KB archive is new.",
@@ -128,17 +127,17 @@
     },
     "winemac": {
       "kind": "patch",
-      "url": "https://github.com/gauthierpiarrette/highball-engine/releases/download/winemac-focus-20261006/winemac-focus-20261006.tar.xz",
-      "sha256": "5bf89e7c5c1309d2e4d53c40d70ef98bba33b7d9dbff4e0976524ac537949f08",
-      "size": 162264,
-      "license": "LGPL-2.1+ (Wine; the changes in source form are spike/patches/winemac-sikarugir10.0-focus.patch and spike/patches/winemac-sikarugir10.0-retina.patch)",
-      "version": "20261006",
+      "url": "https://github.com/gauthierpiarrette/highball-engine/releases/download/winemac-focus-20260930/winemac-focus-20260930.tar.xz",
+      "sha256": "0192214d7d5c7cc8acd13dcacb0c27e8313ef0c64c51b91a93deff0a851a8974",
+      "size": 162192,
+      "license": "LGPL-2.1+ (Wine; the change in source form is spike/patches/winemac-sikarugir10.0-focus.patch)",
+      "version": "20260930",
       "order": 1,
       "extract": {
         "subpath": "winemac.so",
         "into": "engine/lib/wine/x86_64-unix/winemac.so"
       },
-      "note": "The Wine archive's winemac.so (sha256 4cbf65e3…) with four byte edits, made and checked by Scripts/build-winemac-focus.sh, re-signed ad hoc under its own identifier: upstream b568eaac4a (no made-up WM_MOUSEACTIVATE when macOS gives a window focus, Wine bug 48121), both halves of CrossOver Hack #18896 (the driver no longer drops the focus event for a window Wine made key), and in macdrv_GetDeviceCaps the shift that doubled HORZRES and VERTRES in retina mode becomes a nop (athei/wine fa43d6db2, highball#261). Replaces the file after the Wine archive unpacks (order 1)."
+      "note": "The Wine archive's winemac.so (sha256 4cbf65e3…) with three byte edits, made and checked by Scripts/build-winemac-focus.sh, re-signed ad hoc under its own identifier: upstream b568eaac4a (no made-up WM_MOUSEACTIVATE when macOS gives a window focus, Wine bug 48121) and both halves of CrossOver Hack #18896 (the driver no longer drops the focus event for a window Wine made key). Replaces the file after the Wine archive unpacks (order 1)."
     },
     "wineserver": {
       "kind": "patch",
@@ -203,10 +202,10 @@
     "GST_PLUGIN_PATH": "${frameworks}/GStreamer.framework/Versions/1.0/lib/gstreamer-1.0"
   },
   "verified": {
-    "date": "2026-10-06",
+    "date": "2026-10-03",
     "macos": "27.0",
-    "chip": "Apple M1 Pro",
-    "result": "The new winemac.so in a copy of the default engine's tree, probed with GetDeviceCaps, GetSystemMetrics and EnumDisplaySettings: Retina off, 1728x1117 everywhere, as before. Retina on, HORZRES and VERTRES 3456x2234, matching GetSystemMetrics and DESKTOPHORZRES, where the original driver gives 6912x4468. No game run on this revision yet. The published archive was downloaded and matches this manifest's checksum."
+    "chip": "Apple M4",
+    "result": "d3d9stall with DEP as it comes reports DEP on, Lock+write 1.3 to 1.7 s over two runs and no lock over 50 ms, where r19 spent 48 to 51 s with stalls of up to 46 s; dep=on gets STATUS_ACCESS_DENIED. Then, from the same Steam environment moved to this engine: Five Nights at Freddy's (32-bit) reached its menu on DXVK's Direct3D 9, Among Us, Counter-Strike 2 and Vindictus (Steam Connector) their windows. Nothing was played past those screens, and no program that writes code into data pages was tried."
   },
   "licenses": {
     "apple-gptk-license-2023-08-17": {

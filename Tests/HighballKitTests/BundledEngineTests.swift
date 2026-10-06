@@ -85,6 +85,8 @@ final class BundledEngineTests: XCTestCase {
     /// On 2026-10-03 ntdll.so is replaced again (wineserver comes from the same archive) so data
     /// execution prevention stays on under Rosetta, where Wine turning it off made every write to
     /// an executable page fault (highball#165).
+    /// On 2026-10-06 winemac.so gains a fourth edit so retina mode stops doubling HORZRES and
+    /// VERTRES (highball#261), on the default line (r22) and on the D3DMetal 4 line (r23).
     /// Everything else is byte-identical, so it is not downloaded again, and every new archive
     /// comes from Highball's own release pages (a component URL has to be ours to stay immutable,
     /// #27/#28).
@@ -98,7 +100,8 @@ final class BundledEngineTests: XCTestCase {
         }
         func one(_ id: String) throws -> EngineManifest { try XCTUnwrap(all.first { $0.id == id }, "\(id) missing") }
         for (current, baseID) in [("x64-sikarugir10.0_6-r19", "x64-sikarugir10.0_6-r5"), ("x64-sikarugir10.0_6-r21", "x64-sikarugir10.0_6-r5"),
-                                  ("x64-sikarugir10.0_6-r20", "x64-sikarugir10.0_6-r6")] {
+                                  ("x64-sikarugir10.0_6-r22", "x64-sikarugir10.0_6-r5"),
+                                  ("x64-sikarugir10.0_6-r20", "x64-sikarugir10.0_6-r6"), ("x64-sikarugir10.0_6-r23", "x64-sikarugir10.0_6-r6")] {
             let r = try one(current), base = try one(baseID)
             XCTAssertEqual(r.minMacOS, base.minMacOS, "\(current) must keep \(baseID)'s floor")
             XCTAssertEqual(r.baseEnv?["D3DM_MTL4"], base.baseEnv?["D3DM_MTL4"], "\(current) must keep \(baseID)'s Metal 4 setting")
@@ -126,7 +129,7 @@ final class BundledEngineTests: XCTestCase {
             // The msync fix is byte edits to the same archive's wineserver and ntdll.so
             // (Scripts/build-wine10-msync.sh), one archive behind two single-file components. r21's
             // archive (Scripts/build-wine10-dep.sh) carries those edits plus the DEP one.
-            let archive = current == "x64-sikarugir10.0_6-r21" ? "wine10-dep-" : "wine10-msync-"
+            let archive = ["x64-sikarugir10.0_6-r21", "x64-sikarugir10.0_6-r22"].contains(current) ? "wine10-dep-" : "wine10-msync-"
             for (name, into) in [("wineserver", "engine/bin/wineserver"), ("ntdll-unix", "engine/lib/wine/x86_64-unix/ntdll.so")] {
                 let c = try XCTUnwrap(r.components[name])
                 XCTAssertEqual(c.extract?.into, into, "\(current)/\(name) replaces one file, the Wine archive's own")
@@ -144,16 +147,30 @@ final class BundledEngineTests: XCTestCase {
             XCTAssertTrue(audio.url.absoluteString.hasPrefix("https://github.com/gauthierpiarrette/highball-engine/releases/download/audiobuf-"),
                           "\(current)'s audio library must come from Highball's own release page: \(audio.url)")
         }
-        XCTAssertEqual(all.last?.id, "x64-sikarugir10.0_6-r21", "r21 is the default engine")
+        XCTAssertEqual(all.last?.id, "x64-sikarugir10.0_6-r22", "r22 is the default engine")
+        // r22 and r23 are r21 and r20 with only the driver changed: the retina fix rides one new
+        // archive, and every other download is reused.
+        for (fixed, before) in [("x64-sikarugir10.0_6-r22", "x64-sikarugir10.0_6-r21"), ("x64-sikarugir10.0_6-r23", "x64-sikarugir10.0_6-r20")] {
+            let r = try one(fixed), b = try one(before)
+            XCTAssertEqual(r.components["winemac"]?.version, "20261006", "\(fixed) carries the retina-fixed driver")
+            XCTAssertEqual(b.components["winemac"]?.version, "20260930", "\(before) keeps the driver it shipped with")
+            for (name, c) in b.components where name != "winemac" {
+                XCTAssertEqual(r.components[name]?.sha256, c.sha256, "\(fixed)/\(name) must be \(before)'s, only the driver changes")
+            }
+            XCTAssertEqual(r.minMacOS, b.minMacOS)
+        }
         // The update to r21 moves r17 and r19 environments straight over, and leaves GPTK 4 ones (r18)
         // for their own line's r20, which is where the walk must send them.
         let shipped = Set(all.flatMap { $0.components.keys })
-        XCTAssertTrue(EngineStore.canMoveBottle(on: try one("x64-sikarugir10.0_6-r17"), to: try one("x64-sikarugir10.0_6-r21"), shipped: shipped))
-        XCTAssertTrue(EngineStore.canMoveBottle(on: try one("x64-sikarugir10.0_6-r19"), to: try one("x64-sikarugir10.0_6-r21"), shipped: shipped))
-        XCTAssertFalse(EngineStore.canMoveBottle(on: try one("x64-sikarugir10.0_6-r18"), to: try one("x64-sikarugir10.0_6-r21"), shipped: shipped))
-        XCTAssertEqual(EngineStore.successor(for: try one("x64-sikarugir10.0_6-r18"), among: all, shipped: shipped, macOS: "27.0")?.id,
-                       "x64-sikarugir10.0_6-r20")
-        for rollback in ["x64-sikarugir10.0_6-r13", "x64-sikarugir10.0_6-r15", "x64-sikarugir10.0_6-r17", "x64-sikarugir10.0_6-r19"] {
+        for from in ["x64-sikarugir10.0_6-r17", "x64-sikarugir10.0_6-r19", "x64-sikarugir10.0_6-r21"] {
+            XCTAssertTrue(EngineStore.canMoveBottle(on: try one(from), to: try one("x64-sikarugir10.0_6-r22"), shipped: shipped), "\(from) moves to r22")
+        }
+        XCTAssertFalse(EngineStore.canMoveBottle(on: try one("x64-sikarugir10.0_6-r18"), to: try one("x64-sikarugir10.0_6-r22"), shipped: shipped))
+        for gptk4 in ["x64-sikarugir10.0_6-r18", "x64-sikarugir10.0_6-r20"] {
+            XCTAssertEqual(EngineStore.successor(for: try one(gptk4), among: all, shipped: shipped, macOS: "27.0")?.id,
+                           "x64-sikarugir10.0_6-r23", "\(gptk4) environments stay on the D3DMetal 4 line and get its retina fix")
+        }
+        for rollback in ["x64-sikarugir10.0_6-r13", "x64-sikarugir10.0_6-r15", "x64-sikarugir10.0_6-r17", "x64-sikarugir10.0_6-r19", "x64-sikarugir10.0_6-r21"] {
             XCTAssertNotNil(all.first { $0.id == rollback }, "\(rollback) stays offered for rollback")
         }
     }

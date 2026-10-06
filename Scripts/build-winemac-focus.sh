@@ -3,7 +3,7 @@
 # dist/winemac-focus-<tag>.tar.xz holds winemac.so at its top level, and the manifest lays it over
 # engine/lib/wine/x86_64-unix/winemac.so once the Wine archive has unpacked (order 1).
 # The change itself, in source form and with the reasons, is spike/patches/winemac-sikarugir10.0-focus.patch.
-# This Sikarugir revision has no public source, so it goes in as three byte edits to Gcenx's own
+# This Sikarugir revision has no public source, so it goes in as four byte edits to Gcenx's own
 # binary, each checked against the bytes it replaces: a Wine archive with any other winemac.so
 # stops the build instead of patching the wrong place.
 # Usage: Scripts/build-winemac-focus.sh [tag]   -> prints the archive's sha256 and size
@@ -39,6 +39,8 @@ EDITS = [
      'makeFocused: discard mask GOT_FOCUS|LOST_FOCUS (0x30000000) becomes LOST_FOCUS (0x20000000) (CrossOver Hack #18896)'),
     (0x1c584, '741d', '9090',
      'windowDidBecomeKey: no early return when Wine made the window key, so Wine hears about it (CrossOver Hack #18896)'),
+    (0x25001, '41d3e6', '0f1f00',
+     'macdrv_GetDeviceCaps: shll %cl,%r14d (HORZRES/VERTRES doubled when retina_on) becomes a 3-byte nop, so a retina process sees the same size as GetSystemMetrics (athei fa43d6db2, highball#261)'),
 ]
 for off, old, new, why in EDITS:
     old_b, new_b = bytes.fromhex(old), bytes.fromhex(new)
