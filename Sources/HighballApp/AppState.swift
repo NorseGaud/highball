@@ -548,6 +548,17 @@ final class AppState {
         guard item.source == .steam, let appid = item.steamAppID,
               let bottle = item.bottleName.flatMap({ name in bottles.first { $0.name == name } }) ?? defaultBottle,
               let engine = engine(for: bottle) else { return }
+        // An environment without Steam (one made by an older "New environment", which left Steam
+        // out) gets Steam first, then the same button installs the game. It used to run a
+        // steam.exe that was not there and blame an older Highball (2026-10-06).
+        guard steamInstalled(in: bottle) else {
+            appendLog("\(item.title): Steam is not installed in \(bottle.name) yet, installing it first")
+            applyRecipe("steam", to: bottle, then: DoneState(
+                title: String(format: L("Steam is installed in %@"), bottle.name),
+                ctaTitle: String(format: L("Install %@"), displayTitle(item)),
+                cta: { [weak self] in self?.installSteamGame(item) }))
+            return
+        }
         let url = "steam://install/\(appid)"
         appendLog("\(item.title): asking Steam to install it (\(url))")
         let runner = WineRunner(paths: paths, engine: engine, bottle: bottle)
@@ -1355,7 +1366,18 @@ final class AppState {
             let bottle = try await bottleStore.create(name: name, engine: engine)
             await MainActor.run { self.appendLog("bottle '\(name)' created on \(engine.id)"); self.refresh() }
             var runner = RecipeRunner(paths: paths, engine: engine, bottle: bottle)
-            let notes = try await runner.apply(recipe, resolve: { Self.recipe($0) }) { line in Task { @MainActor in self.appendLog(line) } }
+            var notes: [String] = []
+            // A Steam game's new environment needs a Steam of its own. The recipe runner never
+            // installs a launcher named in `requires` (it only says where the game comes from), so
+            // the environment came up empty and its "Install <game>" ran a steam.exe that was not
+            // there (2026-10-06, Forza Horizon 6 on an M5 Max). Steam goes in first: its recipe
+            // suggests DXMT and its own sync, and the game's recipe applied after it has the last word.
+            if item?.source == .steam || (recipe.requires ?? []).contains("steam"),
+               !PEExportName.isWindowsExecutable(at: bottle.driveC.appending(path: "Program Files (x86)/Steam/steam.exe")),
+               let steam = Self.recipe("steam") {
+                notes += try await runner.apply(steam, resolve: { Self.recipe($0) }) { line in Task { @MainActor in self.appendLog(line) } }
+            }
+            notes += try await runner.apply(recipe, resolve: { Self.recipe($0) }) { line in Task { @MainActor in self.appendLog(line) } }
             for n in notes { await MainActor.run { self.appendLog("note: \(n)") } }
             await MainActor.run { self.selectedBottle = name }
         }

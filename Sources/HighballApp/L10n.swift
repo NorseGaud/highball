@@ -491,6 +491,7 @@ enum L10n {
         "Some files couldn't be removed": "Certains fichiers n'ont pas pu être supprimés",
         "Steam": "Steam",
         "Steam is installed": "Steam est installé",
+        "Steam is installed in %@": "Steam est installé dans %@",
         "Steam is running": "Steam est en cours",
         "Steam is running in %@": "Steam est en cours dans %@",
         "Stop and repair": "Arrêter et réparer",
